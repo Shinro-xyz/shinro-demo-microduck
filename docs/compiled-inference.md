@@ -56,7 +56,7 @@ kernel is the memoryless graph, and the part with data-dependent branching stays
 in Python beside it.
 
 The `.so` itself is not a Python artifact — `make interop` runs the same file
-through C, C++, Zig and Python hosts and checks the four agree (see
+through C, C++, Zig, Rust and Python hosts and checks they agree (see
 [`../interop/README.md`](../interop/README.md)).
 
 ---

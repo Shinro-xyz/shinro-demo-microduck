@@ -74,9 +74,9 @@ verify:
 
 gates: check verify
 
-# Cross-language C-ABI interop: the same `.so` driven through C, C++, Zig, and
-# Python with one input (see interop/README.md). Proves the kernel needs no
-# Python; needs a C/C++ compiler and Zig on PATH.
+# Cross-language C-ABI interop: the same `.so` driven through C, C++, Zig, Rust,
+# and Python with one input (see interop/README.md). Proves the kernel needs no
+# Python; needs a C/C++ compiler and Zig on PATH (`rustc` is optional locally).
 interop:
 	$(MAKE) -C interop SO=$(abspath build/compiled_policy/lib/lib_neural_network.so) PYTHON=$(PYTHON) REPO_ROOT=$(CURDIR)
 

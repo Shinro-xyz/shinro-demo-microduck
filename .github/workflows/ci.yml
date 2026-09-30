@@ -52,7 +52,12 @@ jobs:
       - name: Framework gates (check + verify)
         run: make gates
 
-      # The same .so through C, C++, Zig, and Python — proves the kernel's
+      # Rust ships on the ubuntu runner image; assert it so a future image
+      # without it fails here instead of silently skipping the Rust host.
+      - name: Assert the Rust toolchain
+        run: rustc --version
+
+      # The same .so through C, C++, Zig, Rust, and Python — proves the kernel's
       # language-agnostic C ABI without a Python runtime in the host.
       - name: Cross-language C-ABI interop
         run: make interop

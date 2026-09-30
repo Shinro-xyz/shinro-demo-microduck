@@ -25,7 +25,7 @@ src/shinro_demo_microduck/
 demos/demo_compiled_policy.py                the replay demo
 scripts/backend_probe.py                     one backend, one process: RSS, mappings, latency
 scripts/compare_backends.py                  deployment host vs adapter vs onnxruntime (+ on-Pi)
-interop/                                     the same .so through C, C++, Zig, Python (interop/README.md)
+interop/                                     the same .so through C, C++, Zig, Rust, Python (interop/README.md)
 tests/                                       contract, sim, host, import, parity, kernel, backends, trajectory, components
 ```
 
@@ -66,5 +66,5 @@ which apply:
 
 `make gates` runs the check + verify pair; CI runs it (and `make interop`) after
 `make compile`. The `.so` is not a Python artifact: `make interop` drives the same
-file from C, C++, Zig and Python with one 61-D input, and the four 14-D actions
-agree bit for bit — see [`../interop/README.md`](../interop/README.md).
+file from C, C++, Zig, Rust and Python with one 61-D input, and all five 14-D
+actions agree bit for bit — see [`../interop/README.md`](../interop/README.md).

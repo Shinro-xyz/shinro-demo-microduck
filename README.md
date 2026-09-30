@@ -38,7 +38,7 @@ first inference**, against onnxruntime's 132.8 MB, +44.8 MB and 121 ms. The
 no-dependency claim is *asserted by a test in a fresh interpreter*, not asserted
 in prose — and demonstrated from the other side by
 [`interop/`](interop/README.md) (`make interop`), which drives the same `.so`
-from C, C++, Zig and Python with one input: three of the four hosts have no
+from C, C++, Zig, Rust and Python with one input: four of the five hosts have no
 Python at all, so the ABI is language-agnostic rather than merely Python-loadable.
 
 **The same artifact is measured on the target.** A Raspberry Pi 3 B+ runs it at
@@ -150,7 +150,7 @@ the command still reaches the policy the same way, inside the observation.
 | compile | `lib/lib_neural_network.so` · 790 KiB | `shinro build` oracle gate: `.so` vs interpreter | `3.3e-16` |
 | replay | 50 Hz MuJoCo loop driven from the `.so` | **lockstep parity** per tick, kernel vs interpreter | `≤ 8.9e-16` |
 | deploy | `.so` through `MicroduckPolicy` | install size, RSS, time to first inference | `0.8 MB`, `+1.2 MB`, `7.9 ms` |
-| embed | the same `.so` from C, C++, Zig, Python | four independent hosts agree | **bit-identical** |
+| embed | the same `.so` from C, C++, Zig, Rust, Python | five independent hosts agree | **bit-identical** |
 | track | preset reference path, closed loop | cross-track error / path coverage | `8.6 mm` mean / `100%` on a 1 m circle |
 
 The replay is driven *only* by the compiled kernel's action, through the ctypes
@@ -170,7 +170,7 @@ make demo            # per-command GIFs (composite: 3-D view, path, velocity)
 make footprint       # deployment host vs shinro adapter vs onnxruntime (+ on-Pi numbers)
 make check           # framework gate: both components construct from their TOML
 make verify          # framework gate: the stamped artifact matches its record
-make interop         # the same .so through C, C++, Zig, and Python
+make interop         # the same .so through C, C++, Zig, Rust, and Python
 make test            # contract, sim, host, parity, kernel, components
 ```
 
@@ -212,7 +212,7 @@ reference path.
 | [compiled-inference.md](docs/compiled-inference.md) | the trace → compose → lower → oracle chain, and why the normalizer is baked in |
 | [policy-contract.md](docs/policy-contract.md) | the 61-D observation and 14-D action layout, verified against the ONNX metadata |
 | [footprint.md](docs/footprint.md) | deployment host vs shinro adapter vs onnxruntime: install size, RSS, latency, and the on-Pi numbers |
-| [interop/README.md](interop/README.md) | the same kernel through C, C++, Zig and Python — the C ABI, not the Python binding |
+| [interop/README.md](interop/README.md) | the same kernel through C, C++, Zig, Rust and Python — the C ABI, not the Python binding |
 | [trajectories.md](docs/trajectories.md) | preset reference paths as registered shinro components, and why tracking must be closed loop |
 | [fidelity.md](docs/fidelity.md) | what this rehearsal reproduces, what it does not, and the three behaviours worth knowing |
 | [watching.md](docs/watching.md) | GIFs, the viewer, and MuJoCo's fixed viewer-window size |

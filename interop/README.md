@@ -8,10 +8,10 @@ void shinro_step(const double* in, double* out, double* state);
 
 Nothing about it is Python-, MuJoCo- or shinro-specific. Any language that can
 `dlopen` a shared library can drive it. This directory calls the **same** `.so`
-through C, C++, Zig, and Python with an identical 61-D input and shows they agree
-bit for bit — the empirical form of the repo's "0.8 MB, no interpreter" claim.
-Everywhere else in this repo the kernel is loaded from Python; here the *host*
-has no runtime dependency at all.
+through C, C++, Zig, Rust, and Python with an identical 61-D input and shows they
+agree bit for bit — the empirical form of the repo's "0.8 MB, no interpreter"
+claim. Everywhere else in this repo the kernel is loaded from Python; here four
+of the five hosts have no Python (and no runtime dependency) at all.
 
 Build the artifact first (from the repo root):
 
@@ -26,16 +26,23 @@ make interop          # or: make -C interop
 ```
 
 ```text
-one shinro_step through four languages — same .so, same 61-D input:
+one shinro_step through the compiled kernel — same .so, same 61-D input:
   C        ...14 values...
   C++      ...14 values...
   Zig      ...14 values...
+  Rust     ...14 values...
   Python   ...14 values...
-  => all four agree (bit-identical f64 across the C ABI)
+  => all 5 hosts agree (bit-identical f64 across the C ABI)
 ```
 
 The Python line also cross-checks `MicroduckPolicy` — the host this repo ships —
 against the raw ABI and prints the agreement to stderr.
+
+C, C++, Zig and Python always build (`cc`, `c++`, `zig` on `PATH`). Rust is
+optional locally: `build_rust.sh` skips the host with a note when `rustc` is
+absent, so `make interop` still runs anywhere — pass `RUSTC=/path/to/rustc` if it
+is not on `PATH`. CI's ubuntu runner ships `rustc` and asserts it, so the Rust host
+is always exercised there.
 
 ## Port layout
 
@@ -63,4 +70,5 @@ any output difference is the host's fault, not the input's.
 | C      | `c/kernel_demo.c`         | `cc -O2 -o kernel_demo_c kernel_demo.c -ldl` |
 | C++    | `cpp/kernel_demo.cpp`     | `c++ -std=c++17 -O2 -o kernel_demo_cpp kernel_demo.cpp -ldl` |
 | Zig    | `zig/kernel_demo.zig`     | `zig build-exe -O ReleaseFast -lc -femit-bin=kernel_demo_zig kernel_demo.zig` |
+| Rust   | `rust/kernel_demo.rs`     | `rustc -O -o kernel_demo_rust kernel_demo.rs -l dl` (no cargo, no crates) |
 | Python | `python/kernel_demo.py`   | `python3 python/kernel_demo.py <so>` |
