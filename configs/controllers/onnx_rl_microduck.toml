@@ -1,0 +1,24 @@
+# The Microduck walking policy (wandb 441tzs6d @ model_3750) as an onnx_rl
+# controller. Compiled by `make compile`; replayed by demos/demo_compiled_policy.py.
+#
+# Contract (locked by tests/test_obs_contract.py):
+#   obs  = 61 D = 48 proprio + 13 command
+#          [base_ang_vel(3), projected_gravity(3), joint_pos_rel(14),
+#           joint_vel(14), actions(14), twist(3), head_pose(4), body_pose(6)]
+#   act  = 14 D, position offsets: q_target = default_joint_pos + action
+#   the observation normalizer is BAKED INTO THE ONNX -> normalize = false
+type = "onnx_rl"
+name = "microduck_walking"
+model_path = "models/microduck/BEST_alpha_walking.onnx"
+# artifact_dir = "build/compiled_policy"   # uncomment to use the compiled backend
+action_space = "continuous"
+deterministic = true
+action_scale = 1.0
+action_bias = 0.0
+seed = 0
+
+[observation]
+input_name = "obs"
+# The exporter already applied (x - mean) / std inside the graph (the Sub/Div
+# nodes ahead of mlp.0). Applying it again here would double-normalize.
+normalize = false

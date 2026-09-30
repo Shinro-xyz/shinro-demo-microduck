@@ -1,0 +1,28 @@
+# Policy-only compile scenario: the trained walking ONNX -> lib_neural_network.so.
+#
+#   make compile
+#   # == shinro build scenarios/microduck_walking.toml --out build/compiled_policy
+#
+# There is no [estimator] and no [physics]/[plant]: an ONNX policy is a
+# standalone graph (only `onnx_rl` may omit the estimator), so the compile
+# pipeline never needs to build a sim. The replay is driven separately by
+# src/shinro_demo_microduck/host.py, which loads the very same `.so`.
+#
+# The policy's observation normalizer is baked into the ONNX, so the graph's
+# only input port is the raw 61-D observation (see the controller's
+# [observation] table) and the kernel needs no host-side pre-processing.
+
+[controller]
+type = "onnx_rl"
+config = "configs/controllers/onnx_rl_microduck.toml"
+
+[compile]
+optimize = "release"
+target = "native"
+# The policy sees the raw 61-D obs as its whole plant state: 48 proprioception +
+# 13 command block [twist(3), head_pose(4), body_pose(6)].
+n_x = 61
+n_u = 14
+# Stem the kernel installs as: lib/lib_neural_network.so. The onnx_rl adapter
+# loads exactly this name from artifact_dir.
+artifact_name = "lib_neural_network"

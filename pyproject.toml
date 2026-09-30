@@ -1,0 +1,55 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "shinro-demo-microduck"
+version = "0.1.0"
+description = "Microduck reference-robot demo for the shinro control framework: compile an RL walking policy ONNX to a Zig kernel and replay it in MuJoCo."
+readme = "README.md"
+requires-python = ">=3.12"
+# The `shinro` framework is intentionally NOT a hard dependency: it is consumed
+# from a source checkout (a sibling clone locally, a checked-out repo in CI) so
+# the demo tracks the framework's working tree. See README.md / Makefile.
+dependencies = ["numpy>=2.0"]
+
+[project.optional-dependencies]
+# MuJoCo drives the replay; `better-actuator-models` is the BAM actuator the
+# policy was trained against (voltage control), mirrored here so the replay runs
+# the same actuator model as training instead of the XML's placeholder PD gains.
+# Pinned to the version training resolved (microduck_rl's uv.lock): 1.0.2 renamed
+# `MujocoController(vin_drop_gain=...)` to `vin_drop_resistance`, so a floating
+# range silently changes the API the training-fidelity replay depends on.
+mujoco = ["mujoco>=3.0", "better-actuator-models==1.0.1"]
+media = ["imageio>=2.30", "Pillow>=10.0", "matplotlib>=3.8"]
+# `onnx` reads the policy's exporter metadata (the obs contract is verified
+# against it); `onnxruntime` is the ONNX-spec reference the imported graph is
+# cross-checked against. Neither is needed to *run* the demo — the compiled
+# kernel has no runtime dependency at all.
+dev = ["pytest>=8.0", "ruff>=0.5", "onnx>=1.16", "onnxruntime>=1.24"]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+shinro_demo_microduck = ["assets/**/*"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src", "."]
+addopts = "-p no:cacheprovider"
+markers = [
+    "integration: full-loop physics-backed tests (require MuJoCo)",
+    "kernel: tests that need a compiled kernel artifact (require `make compile`)",
+]
+
+[tool.ruff]
+target-version = "py312"
+line-length = 140
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "W", "UP"]
+
+[tool.ruff.lint.per-file-ignores]
+# Demo scripts set MUJOCO_GL=egl before importing mujoco, so their imports are
+# deliberately not at module top.
+"demos/*" = ["E402", "I001"]

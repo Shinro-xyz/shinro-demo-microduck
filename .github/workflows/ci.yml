@@ -1,0 +1,50 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      # The demo consumes shinro from a source checkout, so check it out as a
+      # sibling and install it editable (mirrors the local `make install`).
+      - name: Check out the shinro framework
+        uses: actions/checkout@v4
+        with:
+          repository: Shinro-xyz/shinro-python-modules
+          ref: main
+          path: shinro-python-modules
+
+      # `shinro build` shells out to `zig` on PATH. Taking it from the PyPI
+      # `ziglang` wheel keeps this a first-party dependency (no third-party
+      # setup-zig action) and pins the exact compiler the local build uses.
+      - name: Install Zig
+        run: |
+          pip install "ziglang==0.16.0"
+          ZIG_DIR="$(python -c 'import pathlib, ziglang; print(pathlib.Path(ziglang.__file__).parent)')"
+          chmod +x "$ZIG_DIR/zig"
+          sudo ln -sf "$ZIG_DIR/zig" /usr/local/bin/zig
+          zig version
+
+      - name: Install
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e "./shinro-python-modules[onnx-rl]"
+          pip install -e ".[mujoco,media,dev]"
+
+      # Compile first: the kernel tests skip without an artifact, and the
+      # lockstep parity check is the point of this repo.
+      - name: Compile the policy kernel
+        run: make compile
+
+      - name: Test
+        run: make test
