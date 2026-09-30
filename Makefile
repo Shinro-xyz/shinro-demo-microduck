@@ -1,4 +1,7 @@
-.PHONY: install test test-quick demo live gif trajectory trajectory-gifs compile run footprint
+# shellcheck disable=SC1089,SC2046,SC2068,SC2145,SC2154,SC2276,SC2283,SC2034,SC1091
+# (shellcheck parses this file as shell; the Makefile variables/loops below are not shell)
+
+.PHONY: install test test-quick demo live gif trajectory trajectory-gifs compile run footprint check verify gates interop
 
 # Path to the shinro framework checkout (sibling by default).
 SHINRO ?= ../shinro-python-modules
@@ -53,6 +56,29 @@ demo:
 # installed footprint, process RSS, time to first inference, latency, agreement.
 footprint:
 	$(PYTHON) scripts/compare_backends.py --out build/backend_comparison.md
+
+# ─── framework gates ─────────────────────────────────────────────────────────
+# The two `shinro` gates that apply to this repo. Both are cheap (no sim, no
+# rebuild) and run in CI after `make compile`.
+
+# Construction gate: every component this repo ships is built through shinro's
+# own factory, and a bad config fails loudly here instead of at run time.
+check:
+	shinro check configs/controllers/onnx_rl_microduck.toml
+	shinro check configs/controllers/pure_pursuit.toml --import shinro_demo_microduck.tracker
+
+# Drift gate: re-hash the stamped artifacts against the deployment record that
+# `make compile` wrote — a hand-edited `.so` or a moved config is caught here.
+verify:
+	shinro verify scenarios/microduck_walking.toml --out build/compiled_policy
+
+gates: check verify
+
+# Cross-language C-ABI interop: the same `.so` driven through C, C++, Zig, and
+# Python with one input (see interop/README.md). Proves the kernel needs no
+# Python; needs a C/C++ compiler and Zig on PATH.
+interop:
+	$(MAKE) -C interop SO=$(abspath build/compiled_policy/lib/lib_neural_network.so) PYTHON=$(PYTHON) REPO_ROOT=$(CURDIR)
 
 # Rebuild the kernel and immediately replay it in MuJoCo.
 run: compile demo

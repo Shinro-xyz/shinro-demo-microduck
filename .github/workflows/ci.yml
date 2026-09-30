@@ -30,7 +30,8 @@ jobs:
       - name: Install Zig
         run: |
           pip install "ziglang==0.16.0"
-          ZIG_DIR="$(python -c 'import pathlib, ziglang; print(pathlib.Path(ziglang.__file__).parent)')"
+          PY_ZIG='import ziglang,os;print(os.path.dirname(ziglang.__file__))'
+          ZIG_DIR="$(python -c "$PY_ZIG")"
           chmod +x "$ZIG_DIR/zig"
           sudo ln -sf "$ZIG_DIR/zig" /usr/local/bin/zig
           zig version
@@ -45,6 +46,16 @@ jobs:
       # lockstep parity check is the point of this repo.
       - name: Compile the policy kernel
         run: make compile
+
+      # The two shinro gates that apply here: components construct through the
+      # factories, and the stamped artifact still matches its deployment record.
+      - name: Framework gates (check + verify)
+        run: make gates
+
+      # The same .so through C, C++, Zig, and Python — proves the kernel's
+      # language-agnostic C ABI without a Python runtime in the host.
+      - name: Cross-language C-ABI interop
+        run: make interop
 
       - name: Test
         run: make test

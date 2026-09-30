@@ -40,6 +40,25 @@ exporter, so the graph's only input port is the raw 61-D observation and the
 host does no pre-processing. `configs/controllers/onnx_rl_microduck.toml` sets
 `observation.normalize = false` for exactly that reason.
 
+## The gates around the kernel
+
+`shinro build` is the gate that matters — trace → compose → lower → `zig build` →
+oracle-check `.so`-vs-interpreter → stamp. Two more `shinro` verbs apply here and
+run in CI (`make gates`): `shinro verify` (`make verify`) re-hashes the stamped
+inputs and outputs against the deployment record, and `shinro check`
+(`make check`) constructs each component through its factory.
+
+`shinro trace` — the per-component op-coverage gate — does **not** apply to either
+component. The policy is imported as a whole graph by the `policy_only` recipe
+rather than traced component-by-component, and the tracker is a host-side law
+(nearest-point search, `atan2`) that cannot lower. That split is the design: the
+kernel is the memoryless graph, and the part with data-dependent branching stays
+in Python beside it.
+
+The `.so` itself is not a Python artifact — `make interop` runs the same file
+through C, C++, Zig and Python hosts and checks the four agree (see
+[`../interop/README.md`](../interop/README.md)).
+
 ---
 
 What that artifact costs at runtime — install size, RSS, latency, and the same
