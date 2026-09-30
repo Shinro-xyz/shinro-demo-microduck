@@ -1,0 +1,27 @@
+# The Microduck path tracker, registered as `microduck_pure_pursuit`.
+#
+# A shinro Controller: state in ([x, y, yaw, yaw_rate]), 13-D Microduck command
+# out. It sits between navigation and the trained policy — the policy is the
+# joint-level controller, this produces the twist the policy tracks.
+#
+# Build it through the framework:
+#     ControllerFactory("configs/controllers/pure_pursuit.toml").create()
+type = "microduck_pure_pursuit"
+
+# Defaults below are the best row of a sweep scored across three paths at once (a
+# 1 m circle, a smoothed 5-waypoint loop, a figure-eight) — a gain set tuned on the
+# circle alone cuts the waypoint corners badly. Mean / max cross-track error:
+#     circle 8.6/19.4 mm    waypoints 14.0/52.8 mm    figure_eight 10.5/30.4 mm
+# Only list the fields you want to change; every one is optional.
+v_cmd = 0.35        # forward command while tracking (measured: -> ~0.17 m/s body)
+lookahead = 0.25    # lookahead along the reference [m] — shorter tracks tighter
+k_heading = 1.5     # yaw command per radian of heading error [rad/s per rad]
+k_yaw_rate = 0.5    # damping on the measured yaw rate (absorbs the erratic yaw response)
+w_max = 1.0         # yaw command ceiling [rad/s]
+
+# Never command a forward speed inside the policy's deadband: below ~0.30 the
+# robot stands instead of crawling, so "slow down to 0.05" is really "stop".
+v_min_cmd = 0.30
+v_max_cmd = 0.40    # ceiling of the trained forward-command range
+slow_cos = 0.35     # floor of the cos(heading error) speed reduction into a turn
+goal_radius = 0.15  # stop radius at the end of an open reference [m]

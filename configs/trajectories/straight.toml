@@ -1,0 +1,8 @@
+# An OPEN reference: the tracker commands stand once it is within `goal_radius`
+# of the final point, so the robot walks 2 m and stops.
+type = "microduck_loop"
+shape = "straight"
+length = 2.0
+closed = false
+speed = 0.35
+dt = 0.02

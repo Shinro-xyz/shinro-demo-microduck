@@ -118,14 +118,34 @@ class ReplayPanels:
         av = self.ax_vel
         (self.ln_vx,) = av.plot([], [], "-", color="tab:blue", lw=1.8, label="vx measured")
         (self.ln_vy,) = av.plot([], [], "-", color="tab:green", lw=1.6, label="vy measured")
-        av.axhline(self.cmd_vx, color="tab:blue", ls="--", lw=1.2, alpha=0.7)
-        av.axhline(self.cmd_vy, color="tab:green", ls="--", lw=1.2, alpha=0.7)
+        self._cmd_lines = (
+            av.axhline(self.cmd_vx, color="tab:blue", ls="--", lw=1.2, alpha=0.7),
+            av.axhline(self.cmd_vy, color="tab:green", ls="--", lw=1.2, alpha=0.7),
+        )
         av.set_xlim(0.0, duration)
         av.set_xlabel("t [s]")
         av.set_ylabel("linear velocity [m/s]")
-        av.set_title(f"velocity tracking · cmd=({self.cmd_vx:+.2f},{self.cmd_vy:+.2f}) m/s · wz={self.cmd_wz:+.2f} rad/s", fontsize=10)
+        av.set_title(self._vel_title(), fontsize=10)
         av.grid(True, alpha=0.3)
         av.legend(loc="best", fontsize=8, framealpha=0.9)
+
+    def _vel_title(self) -> str:
+        return f"velocity tracking · cmd=({self.cmd_vx:+.2f},{self.cmd_vy:+.2f}) m/s · wz={self.cmd_wz:+.2f} rad/s"
+
+    def set_command(self, command: np.ndarray) -> None:
+        """Re-annotate for a new command, for a run that switches mid-flight.
+
+        The dashed reference lines, the bird's-eye command arrow and both titles
+        follow the live command, so the showcase GIF's panels never advertise a
+        command the robot is no longer tracking.
+        """
+        self.command = np.asarray(command, dtype=np.float64).ravel()
+        self.cmd_vx, self.cmd_vy, self.cmd_wz = _twist(self.command)
+        for line, value in zip(self._cmd_lines, (self.cmd_vx, self.cmd_vy)):
+            line.set_ydata([value, value])
+        self.cmd_arrow.set_label(f"cmd v=({self.cmd_vx:.2f},{self.cmd_vy:.2f})")
+        self.ax_path.legend(loc="best", fontsize=8, framealpha=0.9)
+        self.ax_vel.set_title(self._vel_title(), fontsize=10)
 
     def update(self, t: float, xy: np.ndarray, velocity: np.ndarray, yaw_rate: float) -> None:
         """Record one tick. ``velocity`` is the world-frame trunk linear velocity (3,)."""
@@ -152,7 +172,14 @@ class ReplayPanels:
 
         self.ln_vx.set_data(self._t, self._vx)
         self.ln_vy.set_data(self._t, self._vy)
-        span = max(0.45, max(map(abs, self._vx + self._vy)) * 1.2)
+        # Keep the command reference lines on-screen too — they move when a run
+        # switches command mid-flight.
+        span = max(
+            0.45,
+            max(map(abs, self._vx + self._vy)) * 1.2,
+            abs(self.cmd_vx) * 1.25,
+            abs(self.cmd_vy) * 1.25,
+        )
         self.ax_vel.set_ylim(-span, span)
 
     def frame(self) -> np.ndarray:
@@ -170,3 +197,109 @@ def command_summary(command: np.ndarray) -> str:
     head = cmd[contract.OBS_HEAD_CMD]
     body = cmd[contract.OBS_BODY_CMD]
     return f"twist=({cmd[0]:+.2f},{cmd[1]:+.2f},{cmd[2]:+.2f}) head_norm={np.linalg.norm(head):.3f} body_norm={np.linalg.norm(body):.3f}"
+
+
+class TrackingPanels:
+    """Reference-vs-actual path, cross-track error, and what the follower asked for.
+
+    The trajectory counterpart of :class:`ReplayPanels`. A constant-command run
+    only needs "did it hold the speed"; a waypoint run needs "did it stay on the
+    path", plus the twist the follower was emitting to make that happen — which
+    is also the honest picture of the policy's deadband (the shaded band).
+
+    Args:
+        reference_xy: The reference path (N, 2) to draw.
+        duration: Run length in seconds.
+        path_wh / side_wh: Panel sizes in inches.
+        dpi: Figure DPI.
+    """
+
+    def __init__(
+        self,
+        reference_xy: np.ndarray,
+        duration: float,
+        *,
+        path_wh: tuple[float, float] = (4.4, 4.4),
+        side_wh: tuple[float, float] = (4.4, 4.4),
+        dpi: int = 100,
+    ) -> None:
+        self.reference = np.asarray(reference_xy, dtype=np.float64)[:, :2]
+        self._t: list[float] = []
+        self._xy: list[np.ndarray] = []
+        self._xt: list[float] = []
+        self._vx: list[float] = []
+        self._wz: list[float] = []
+
+        self.fig = plt.figure(figsize=(path_wh[0] + side_wh[0], path_wh[1]), dpi=dpi)
+        outer = self.fig.add_gridspec(1, 2, width_ratios=[path_wh[0], side_wh[0]], wspace=0.32)
+        self.ax_path = self.fig.add_subplot(outer[0, 0])
+        right = outer[0, 1].subgridspec(2, 1, hspace=0.5)
+        self.ax_err = self.fig.add_subplot(right[0, 0])
+        self.ax_cmd = self.fig.add_subplot(right[1, 0])
+
+        ax = self.ax_path
+        ax.set_title("bird's-eye: reference path vs trunk", fontsize=11)
+        ax.plot(self.reference[:, 0], self.reference[:, 1], "--", color="tab:blue", lw=1.6, label="reference path")
+        (self.path_pts,) = ax.plot([], [], "-", color="tab:orange", lw=2.0, label="trunk path")
+        (self.pt_now,) = ax.plot([], [], "o", color="tab:red", ms=8, zorder=5)
+        ax.plot([self.reference[0, 0]], [self.reference[0, 1]], "ks", ms=7, label="start")
+        ax.set_aspect("equal", adjustable="box")
+        ax.set_xlabel("x [m]")
+        ax.set_ylabel("y [m]")
+        ax.grid(True, alpha=0.3)
+        ax.legend(loc="best", fontsize=8, framealpha=0.9)
+
+        eax = self.ax_err
+        (self.ln_xt,) = eax.plot([], [], "-", color="tab:red", lw=1.8, label="cross-track |Δ| [m]")
+        eax.set_xlim(0.0, duration)
+        eax.set_xlabel("t [s]")
+        eax.set_ylabel("error [m]")
+        eax.set_title("cross-track error", fontsize=10)
+        eax.grid(True, alpha=0.3)
+        eax.legend(loc="upper right", fontsize=8, framealpha=0.9)
+
+        cax = self.ax_cmd
+        (self.ln_vx,) = cax.plot([], [], "-", color="tab:blue", lw=1.6, label="vx command")
+        (self.ln_wz,) = cax.plot([], [], "-", color="tab:purple", lw=1.6, label="wz command")
+        cax.axhspan(-0.30, 0.30, color="tab:gray", alpha=0.18)
+        cax.axhline(0.0, color="0.6", lw=0.8)
+        cax.set_xlim(0.0, duration)
+        cax.set_xlabel("t [s]")
+        cax.set_ylabel("command")
+        cax.set_title("twist the tracker asked for (shaded = deadband)", fontsize=9)
+        cax.grid(True, alpha=0.3)
+        cax.legend(loc="best", fontsize=8, framealpha=0.9)
+
+    def update(self, t: float, xy: np.ndarray, cross_track: float, command: np.ndarray) -> None:
+        """Record one tick: position, measured cross-track error, emitted command."""
+        xy = np.asarray(xy, dtype=np.float64)[:2]
+        cmd = np.asarray(command, dtype=np.float64).ravel()
+        self._t.append(t)
+        self._xy.append(xy)
+        self._xt.append(float(cross_track))
+        self._vx.append(float(cmd[0]))
+        self._wz.append(float(cmd[2]))
+
+        pts = np.array(self._xy)
+        self.path_pts.set_data(pts[:, 0], pts[:, 1])
+        self.pt_now.set_data([xy[0]], [xy[1]])
+        pad = 0.25
+        lo = np.minimum(pts.min(axis=0), self.reference.min(axis=0)) - pad
+        hi = np.maximum(pts.max(axis=0), self.reference.max(axis=0)) + pad
+        self.ax_path.set_xlim(lo[0], hi[0])
+        self.ax_path.set_ylim(lo[1], hi[1])
+
+        self.ln_xt.set_data(self._t, self._xt)
+        self.ax_err.set_ylim(0.0, max(0.05, max(self._xt) * 1.2))
+        self.ln_vx.set_data(self._t, self._vx)
+        self.ln_wz.set_data(self._t, self._wz)
+        span = max(0.45, max(map(abs, self._vx + self._wz)) * 1.15)
+        self.ax_cmd.set_ylim(-span, span)
+
+    def frame(self) -> np.ndarray:
+        """Render the panels to an RGB array."""
+        self.fig.canvas.draw()
+        return np.asarray(self.fig.canvas.buffer_rgba())[..., :3]
+
+    def close(self) -> None:
+        plt.close(self.fig)

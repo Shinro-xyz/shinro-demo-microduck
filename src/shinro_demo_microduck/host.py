@@ -11,11 +11,13 @@ Two things live here and they play different roles:
   robot; it exists so the kernel can be checked against an independent
   implementation of the same graph, every tick, on the same observation.
 
-Parity is therefore **lockstep**: both see the identical 61-D observation and
-the kernel's 14-D action is compared to the interpreter's. (shinro's adapter can
-also *be* the actor — ``backend="shinro"`` — which is how the framework's own
-compiled backend is A/B'd against the deployment host; it needs numpy to pack
-port buffers and costs ~47 MB more RSS for identical arithmetic.)
+:class:`KernelRunner` is the obs → action hop both the batch driver and the
+real-time viewer use; parity is **lockstep**: both see the identical 61-D
+observation and the kernel's 14-D action is compared to the interpreter's.
+(shinro's adapter can also *be* the actor — ``backend="shinro"`` — which is how
+the framework's own compiled backend is A/B'd against the deployment host; it
+needs numpy to pack port buffers and costs ~48 MB more RSS for identical
+arithmetic.)
 """
 
 from __future__ import annotations
@@ -68,6 +70,55 @@ def kernel_info(artifact_dir: str | Path = DEFAULT_ARTIFACT) -> str:
     return str(MicroduckPolicy(artifact_dir).info)
 
 
+class KernelRunner:
+    """Observation in, action out — with an optional lockstep parity reference.
+
+    The single hop both the batch driver (:func:`drive`) and the real-time viewer
+    (``demo_compiled_policy --live``) step through, so there is one implementation
+    of "call the kernel" to reason about and test.
+
+    Args:
+        controller_config: The onnx_rl controller TOML (source of the reference).
+        artifact_dir: A ``make compile`` directory.
+        backend: ``"ctypes"`` (default) drives with the deployment host;
+            ``"shinro"`` drives with shinro's compiled adapter instead.
+        compare_eager: Also run the eager interpreter each tick and accumulate
+            lockstep parity.
+
+    Attributes:
+        parity: max |kernel − interpreter| observed so far (0.0 when not comparing).
+    """
+
+    def __init__(
+        self,
+        controller_config: str | Path,
+        artifact_dir: str | Path = DEFAULT_ARTIFACT,
+        *,
+        backend: str = "ctypes",
+        compare_eager: bool = False,
+    ) -> None:
+        if backend not in BACKENDS:
+            raise ValueError(f"backend must be one of {BACKENDS}, got {backend!r}")
+        self.backend = backend
+        self.compare_eager = compare_eager
+        self.kernel = MicroduckPolicy(artifact_dir) if backend == "ctypes" else load_policy(controller_config, artifact_dir=artifact_dir)
+        self.eager = load_policy(controller_config) if compare_eager else None
+        self.parity = 0.0
+
+    def act(self, observation: np.ndarray) -> np.ndarray:
+        """One inference. Both backends hand back a 14-D float64 action; the
+        deployment host's is a zero-copy view over its preallocated output."""
+        action = (
+            np.frombuffer(self.kernel.step(observation), dtype=np.float64)
+            if self.backend == "ctypes"
+            else np.asarray(self.kernel.compute(observation), dtype=np.float64).ravel()
+        )
+        if self.eager is not None:
+            reference = np.asarray(self.eager.compute(observation), dtype=np.float64).ravel()
+            self.parity = max(self.parity, float(np.max(np.abs(action - reference))))
+        return action
+
+
 def drive(
     *,
     command: np.ndarray | None = None,
@@ -100,32 +151,17 @@ def drive(
         NaN when not compared), ``backend``, ``final_trunk_z``, ``travel_xy``,
         ``mean_speed``, ``yaw_rate`` (mean |yaw rate| rad/s), ``tilt_deg``.
     """
-    if backend not in BACKENDS:
-        raise ValueError(f"backend must be one of {BACKENDS}, got {backend!r}")
-
-    kernel = MicroduckPolicy(artifact_dir) if backend == "ctypes" else load_policy(controller_config, artifact_dir=artifact_dir)
-    eager = load_policy(controller_config) if compare_eager else None
+    runner = KernelRunner(controller_config, artifact_dir, backend=backend, compare_eager=compare_eager)
     if sim is None:
         sim = MicroduckSim(command=command, use_bam=use_bam)
 
     n_steps = max(1, int(round(duration_s / CONTROL_DT)))
-    parity = 0.0
     yaw_delta = 0.0
     prev_yaw = _yaw(sim.trunk_quaternion)
     start_xy = sim.trunk_position[:2].copy()
 
     for step in range(n_steps):
-        obs = sim.observation()
-        # Both backends hand back a 14-D float64 action; the kernel's is a
-        # zero-copy view over its preallocated output buffer.
-        action = (
-            np.frombuffer(kernel.step(obs), dtype=np.float64)
-            if backend == "ctypes"
-            else np.asarray(kernel.compute(obs), dtype=np.float64).ravel()
-        )
-        if eager is not None:
-            reference = np.asarray(eager.compute(obs), dtype=np.float64).ravel()
-            parity = max(parity, float(np.max(np.abs(action - reference))))
+        action = runner.act(sim.observation())
         sim.step(action)
         yaw = _yaw(sim.trunk_quaternion)
         # Unwrap so a full turn is not double-counted as a small angle.
@@ -138,7 +174,7 @@ def drive(
     return {
         "steps": n_steps,
         "backend": backend,
-        "parity": parity if eager is not None else float("nan"),
+        "parity": runner.parity if compare_eager else float("nan"),
         "final_trunk_z": float(sim.trunk_position[2]),
         "travel_xy": travel,
         "mean_speed": travel / duration_s,

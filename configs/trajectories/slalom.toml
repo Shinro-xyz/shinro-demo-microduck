@@ -1,0 +1,9 @@
+# Sine-wave corridor along +x (open reference) — continuous small steering.
+type = "microduck_loop"
+shape = "slalom"
+amplitude = 0.35
+wavelength = 1.6
+length = 4.0
+closed = false
+speed = 0.35
+dt = 0.02

@@ -1,0 +1,25 @@
+# The schema a navigation stack would actually emit: a waypoint list.
+# Closed here so the demo runs indefinitely; `closed = false` walks to the last
+# point and stops.
+type = "microduck_loop"
+
+shape = "waypoints"
+closed = true
+speed = 0.35
+dt = 0.02
+
+waypoints = [
+  [0.0, 0.0],
+  [0.8, 0.0],
+  [1.0, 0.5],
+  [0.2, 0.7],
+  [-0.3, 0.3],
+]
+
+# Path conditioning, applied before the tracker sees the path. A 5-waypoint loop
+# has ~68 deg corners over zero arc length, which a velocity-commanded walker
+# cannot track — it cuts them (154 mm mean cross-track error unsmoothed vs 25 mm
+# with this). A navigation stack would do the same thing before handing a path down.
+smooth_spacing = 0.05    # resample to 5 cm arc-length steps
+smooth_window = 0.30     # box-filter width in metres
+smooth_iterations = 2

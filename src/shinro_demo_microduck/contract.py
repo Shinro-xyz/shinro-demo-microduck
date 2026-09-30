@@ -94,11 +94,24 @@ OBS_BODY_CMD = slice(OBS_HEAD_CMD.stop, OBS_HEAD_CMD.stop + 6)
 
 #: The command block in the order the ONNX metadata declares it.
 COMMAND_NAMES: tuple[str, ...] = ("twist", "head_pose", "body_pose")
+
+#: Where each command lands **inside the 61-D observation** (the slots the actor
+#: reads). This is the mapping to index an observation with.
 COMMAND_SLICES: dict[str, slice] = {
     "twist": OBS_TWIST_CMD,
     "head_pose": OBS_HEAD_CMD,
     "body_pose": OBS_BODY_CMD,
 }
+
+#: Where each command lands **inside the 13-D command block** that
+#: :func:`build_command` produces and that the demos write into ``sim.command``.
+#: Distinct from :data:`COMMAND_SLICES` — same commands, different container.
+COMMAND_BLOCK_SLICES: dict[str, slice] = {
+    "twist": slice(0, 3),
+    "head_pose": slice(3, 7),
+    "body_pose": slice(7, 13),
+}
+N_COMMAND = 13
 
 #: Bounds the command channels were trained over (velocity recipe cfg). Used by
 #: demos to pick sane references; not enforced by the kernel.

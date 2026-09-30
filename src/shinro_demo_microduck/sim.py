@@ -13,6 +13,8 @@ policy was trained against.
 
 from __future__ import annotations
 
+import math
+
 import mujoco
 import numpy as np
 
@@ -123,6 +125,23 @@ class MicroduckSim:
             self._bam_ctrl.reset(self.data.qpos)
         else:
             self.data.ctrl[:] = self.default_pose
+        self._last_action[:] = 0.0
+        mujoco.mj_forward(self.model, self.data)
+
+    def place(self, x: float, y: float, yaw: float = 0.0) -> None:
+        """Teleport the trunk to ``(x, y, yaw)`` with the home pose and zero velocity.
+
+        Used to spawn the robot *on* a reference trajectory rather than at the
+        scene origin, so a follower starts with zero initial error.
+        """
+        half = 0.5 * yaw
+        start = self._free_qpos_adr
+        self.data.qpos[start : start + 7] = [x, y, self.spawn_height, math.cos(half), 0.0, 0.0, math.sin(half)]
+        self.data.qpos[self._joint_qpos_adr] = self.default_pose
+        self.data.qvel[:] = 0.0
+        if self._bam_ctrl is not None:
+            self._bam_ctrl.q_target[:] = self.default_pose
+            self._bam_ctrl.reset(self.data.qpos)
         self._last_action[:] = 0.0
         mujoco.mj_forward(self.model, self.data)
 

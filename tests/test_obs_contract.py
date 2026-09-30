@@ -69,3 +69,28 @@ def test_quat_rotate_inverse_holds_gravity_length():
     quat = np.array([0.7071, 0.0, 0.0, 0.7071])  # yaw 90 deg
     gravity = contract.quat_rotate_inverse(quat, [0.0, 0.0, -1.0])
     assert np.isclose(np.linalg.norm(gravity), 1.0)
+
+
+def test_command_block_and_observation_slices_are_consistent():
+    """Two mappings, two containers: the 13-D block built by ``build_command`` and
+    the slots that block occupies in the 61-D observation."""
+    block = contract.build_command(twist=(0.1, 0.2, 0.3), head_pose=(1, 2, 3, 4), body_pose=(5, 6, 7, 8, 9, 10))
+    assert block.shape == (contract.N_COMMAND,)
+    for name in contract.COMMAND_NAMES:
+        block_slice = contract.COMMAND_BLOCK_SLICES[name]
+        obs_slice = contract.COMMAND_SLICES[name]
+        assert block_slice.stop - block_slice.start == obs_slice.stop - obs_slice.start, name
+        assert block[block_slice].shape == block[obs_slice.start - obs_slice.start : obs_slice.stop - obs_slice.start].shape
+
+    # and the observation carries that block verbatim at the obs slices
+    obs = np.zeros(contract.N_OBS)
+    for name in contract.COMMAND_NAMES:
+        obs[contract.COMMAND_SLICES[name]] = block[contract.COMMAND_BLOCK_SLICES[name]]
+    for name in contract.COMMAND_NAMES:
+        assert np.allclose(obs[contract.COMMAND_SLICES[name]], block[contract.COMMAND_BLOCK_SLICES[name]]), name
+
+
+def test_command_block_is_the_concatenation_of_its_terms():
+    block = contract.build_command(twist=(0.1, 0.2, 0.3), head_pose=(1, 2, 3, 4), body_pose=(5, 6, 7, 8, 9, 10))
+    for name, expected in (("twist", [0.1, 0.2, 0.3]), ("head_pose", [1, 2, 3, 4]), ("body_pose", [5, 6, 7, 8, 9, 10])):
+        assert block[contract.COMMAND_BLOCK_SLICES[name]].tolist() == expected, name

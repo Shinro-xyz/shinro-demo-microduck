@@ -1,4 +1,4 @@
-.PHONY: install test test-quick demo compile run footprint
+.PHONY: install test test-quick demo live gif trajectory trajectory-gifs compile run footprint
 
 # Path to the shinro framework checkout (sibling by default).
 SHINRO ?= ../shinro-python-modules
@@ -17,20 +17,46 @@ install:
 compile:
 	shinro build scenarios/microduck_walking.toml --out build/compiled_policy
 
+# Watch it: real-time MuJoCo viewer window, keys 0-4 switch the command,
+# R resets, ESC quits. Needs a display (MUJOCO_GL=glfw on a desktop).
+live:
+	$(PYTHON) -m demos.demo_compiled_policy --live
+
+# Render the small showcase GIF the README embeds (committed under docs/media/).
+gif:
+	$(PYTHON) -m demos.demo_compiled_policy --sequence --gif compact
+
+# Walk a preset reference path: waypoints -> follower -> compiled policy.
+#   make trajectory T=circle LAPS=2     (circle|figure_eight|straight|slalom|waypoints_example)
+# Full-length runs land in build/demos/ (they get big); `trajectory-gif` renders the
+# short one the README embeds.
+T ?= circle
+LAPS ?= 1
+trajectory:
+	$(PYTHON) -m demos.demo_compiled_policy --trajectory $(T) --laps $(LAPS)
+
+# The committed trajectory GIFs in docs/media/ — ONE FULL LAP each, so every path
+# visibly closes. The 'trajectory' render profile is trimmed (8.3 fps, 288 px, 64
+# colours) because these run for a whole lap: 20-70 s, not the 12 s of the walking
+# showcase. Runs in a loop so the total is measurable in one go.
+TRAJECTORY_PRESETS = circle figure_eight straight slalom waypoints_example
+trajectory-gifs:
+	@for t in $(TRAJECTORY_PRESETS); do \
+	  $(PYTHON) -m demos.demo_compiled_policy --trajectory $$t --laps 1 --gif trajectory --out-dir docs/media; \
+	done
+
+# Per-command GIFs (composite: 3-D view, bird's-eye path, velocity tracking).
 demo:
 	$(PYTHON) -m demos.demo_compiled_policy
 
-# Compare the policy's three runtimes (onnxruntime / compiled kernel via shinro /
-# compiled kernel via bare ctypes): installed footprint, process RSS, time to
-# first inference, per-call latency, and numerical agreement. Each backend is
-# probed in its own process, pinned to one CPU.
+# Compare the policy's runtimes (onnxruntime / shinro adapter / deployment host):
+# installed footprint, process RSS, time to first inference, latency, agreement.
 footprint:
 	$(PYTHON) scripts/compare_backends.py --out build/backend_comparison.md
 
 # Rebuild the kernel and immediately replay it in MuJoCo.
 run: compile demo
 
-# Full suite: contract, sim, import fidelity, and kernel lockstep parity.
 test:
 	$(PYTHON) -m pytest tests/ -v --tb=short
 

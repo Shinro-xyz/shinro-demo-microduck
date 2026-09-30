@@ -1,0 +1,16 @@
+# A reference path for the registered `microduck_loop` trajectory generator.
+# Build it through shinro's own factory:
+#     TrajectoryFactory("configs/trajectories/circle.toml").create()
+type = "microduck_loop"
+
+# A 1 m-radius circle through the spawn point with tangent +x, so the robot
+# starts on-path. `closed` makes the reference loop — which is what a walking
+# policy needs, unlike the framework's rest-to-rest generators.
+shape = "circle"
+radius = 1.0
+closed = true
+
+# Time base of the reference: sets the horizon T = length / speed. The tracker has
+# its own forward command, so this is not the gait speed.
+speed = 0.35
+dt = 0.02

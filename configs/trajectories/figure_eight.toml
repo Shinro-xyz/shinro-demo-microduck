@@ -1,0 +1,8 @@
+# Gerono lemniscate through the spawn point. The yaw command has to reverse twice
+# per lap, which is the interesting part for a policy with an erratic yaw response.
+type = "microduck_loop"
+shape = "figure_eight"
+scale = 1.2
+closed = true
+speed = 0.35
+dt = 0.02
