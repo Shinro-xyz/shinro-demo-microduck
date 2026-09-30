@@ -32,7 +32,7 @@ fall back to metrics-only without one.
 Note on the checkpoint: this walking policy has a low-speed deadband — commands
 below ~0.25 m/s produce a stand rather than a slow walk (the tracking reward's
 velocity std is wide, so standing there is cheap), and pure turn-in-place was
-rare in its experience. Commands here stay above that threshold; see README.md.
+rare in its experience. Commands here stay above that threshold; see docs/fidelity.md.
 """
 
 import os

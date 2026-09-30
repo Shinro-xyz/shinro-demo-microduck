@@ -39,7 +39,7 @@ from shinro.factories.registry import register_trajectory
 
 from shinro_demo_microduck.paths import resolve_repo_path
 
-# ─── the measured policy response (see README "Preset trajectories") ────────
+# ─── the measured policy response (see docs/trajectories.md) ───────────────
 
 #: Forward command below which the policy stands still. Never emit inside this band.
 POLICY_DEADBAND_CMD = 0.30
