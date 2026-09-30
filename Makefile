@@ -1,4 +1,4 @@
-.PHONY: install test test-quick demo compile run
+.PHONY: install test test-quick demo compile run footprint
 
 # Path to the shinro framework checkout (sibling by default).
 SHINRO ?= ../shinro-python-modules
@@ -19,6 +19,13 @@ compile:
 
 demo:
 	$(PYTHON) -m demos.demo_compiled_policy
+
+# Compare the policy's three runtimes (onnxruntime / compiled kernel via shinro /
+# compiled kernel via bare ctypes): installed footprint, process RSS, time to
+# first inference, per-call latency, and numerical agreement. Each backend is
+# probed in its own process, pinned to one CPU.
+footprint:
+	$(PYTHON) scripts/compare_backends.py --out build/backend_comparison.md
 
 # Rebuild the kernel and immediately replay it in MuJoCo.
 run: compile demo

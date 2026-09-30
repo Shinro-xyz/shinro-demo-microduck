@@ -11,7 +11,12 @@ requires-python = ">=3.12"
 # The `shinro` framework is intentionally NOT a hard dependency: it is consumed
 # from a source checkout (a sibling clone locally, a checked-out repo in CI) so
 # the demo tracks the framework's working tree. See README.md / Makefile.
-dependencies = ["numpy>=2.0"]
+#
+# No runtime dependencies either: the compiled-policy host
+# (`shinro_demo_microduck.policy.MicroduckPolicy`) is ctypes + the standard
+# library only — that is the whole point of shipping a compiled kernel. numpy,
+# MuJoCo and the media stack live in the extras below.
+dependencies = []
 
 [project.optional-dependencies]
 # MuJoCo drives the replay; `better-actuator-models` is the BAM actuator the
@@ -20,13 +25,13 @@ dependencies = ["numpy>=2.0"]
 # Pinned to the version training resolved (microduck_rl's uv.lock): 1.0.2 renamed
 # `MujocoController(vin_drop_gain=...)` to `vin_drop_resistance`, so a floating
 # range silently changes the API the training-fidelity replay depends on.
-mujoco = ["mujoco>=3.0", "better-actuator-models==1.0.1"]
+mujoco = ["mujoco>=3.0", "better-actuator-models==1.0.1", "numpy>=2.0"]
 media = ["imageio>=2.30", "Pillow>=10.0", "matplotlib>=3.8"]
 # `onnx` reads the policy's exporter metadata (the obs contract is verified
 # against it); `onnxruntime` is the ONNX-spec reference the imported graph is
 # cross-checked against. Neither is needed to *run* the demo — the compiled
 # kernel has no runtime dependency at all.
-dev = ["pytest>=8.0", "ruff>=0.5", "onnx>=1.16", "onnxruntime>=1.24"]
+dev = ["pytest>=8.0", "ruff>=0.5", "numpy>=2.0", "onnx>=1.16", "onnxruntime>=1.24"]
 
 [tool.setuptools.packages.find]
 where = ["src"]

@@ -22,3 +22,19 @@ CONTROLLER_CONFIG = HERE.parent.parent / "configs" / "controllers" / "onnx_rl_mi
 
 #: Where ``make compile`` installs the kernel (``lib/lib_neural_network.so``).
 DEFAULT_ARTIFACT = HERE.parent.parent / "build" / "compiled_policy"
+
+#: Kernel stem shinro's onnx_rl compiled backend loads (its KERNEL_FILENAME), and
+#: what ``[compile].artifact_name`` in the scenario declares.
+KERNEL_FILENAME = "lib_neural_network.so"
+
+_REPO_ROOT = HERE.parent.parent
+
+
+def resolve_repo_path(path: str | Path) -> Path:
+    """Resolve a repo-relative path, preferring CWD over the source checkout."""
+    p = Path(path)
+    if p.is_absolute():
+        return p
+    if p.exists():
+        return p.resolve()
+    return (_REPO_ROOT / p).resolve()

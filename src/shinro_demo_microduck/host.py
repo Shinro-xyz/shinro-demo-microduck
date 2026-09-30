@@ -1,18 +1,21 @@
 """Host-side driver: run the Microduck sim from the compiled policy kernel.
 
-The same controller config is loaded twice through shinro's ``onnx_rl``
-adapter, which has two interchangeable backends over one graph:
+Two things live here and they play different roles:
 
-* **eager** (``model_path``) — the ONNX is imported and executed by the pure
-  numpy interpreter, in-process;
-* **compiled** (``artifact_dir``) — ``lib/lib_neural_network.so`` is dlopen'd and
-  driven through the ``shinro_step`` C ABI, with the graph manifest next to it
-  describing the port layout.
+* **the actor** — :class:`~shinro_demo_microduck.policy.MicroduckPolicy`, the
+  ctypes deployment host. It owns the tick loop: it preallocates buffers, calls
+  the kernel's C ABI, and its action drives the plant. This is how a team loads
+  the artifact.
+* **the reference** — shinro's ``onnx_rl`` adapter in *eager* mode, which imports
+  the ONNX and executes it with the pure-numpy interpreter. It never drives the
+  robot; it exists so the kernel can be checked against an independent
+  implementation of the same graph, every tick, on the same observation.
 
-Both run the *same* graph, so the honest correctness check is **lockstep
-parity**: each tick both see the identical observation, and the kernel's action
-is compared to the interpreter's. The plant is advanced only by the compiled
-kernel's action — the eager policy never drives the robot.
+Parity is therefore **lockstep**: both see the identical 61-D observation and
+the kernel's 14-D action is compared to the interpreter's. (shinro's adapter can
+also *be* the actor — ``backend="shinro"`` — which is how the framework's own
+compiled backend is A/B'd against the deployment host; it needs numpy to pack
+port buffers and costs ~47 MB more RSS for identical arithmetic.)
 """
 
 from __future__ import annotations
@@ -25,23 +28,11 @@ from pathlib import Path
 import numpy as np
 from shinro.controllers.onnx_rl_adapter import OnnxRLAdapter
 
-from shinro_demo_microduck.paths import DEFAULT_ARTIFACT, HERE
+from shinro_demo_microduck.paths import DEFAULT_ARTIFACT, KERNEL_FILENAME, resolve_repo_path
+from shinro_demo_microduck.policy import MicroduckPolicy
 from shinro_demo_microduck.sim import CONTROL_DT, MicroduckSim
 
-#: Kernel stem the onnx_rl compiled backend loads (shinro's KERNEL_FILENAME).
-KERNEL_FILENAME = "lib_neural_network.so"
-
-_REPO_ROOT = HERE.parent.parent
-
-
-def resolve_repo_path(path: str | Path) -> Path:
-    """Resolve a repo-relative path, preferring CWD over the source checkout."""
-    p = Path(path)
-    if p.is_absolute():
-        return p
-    if p.exists():
-        return p.resolve()
-    return (_REPO_ROOT / p).resolve()
+BACKENDS = ("ctypes", "shinro")
 
 
 def load_controller_config(path: str | Path) -> dict:
@@ -54,7 +45,7 @@ def load_controller_config(path: str | Path) -> dict:
 
 
 def load_policy(controller_config: str | Path, *, artifact_dir: str | Path | None = None) -> OnnxRLAdapter:
-    """Build an ``onnx_rl`` adapter from the config (eager, or compiled when given)."""
+    """Build shinro's ``onnx_rl`` adapter (eager, or its compiled backend when given)."""
     cfg = load_controller_config(controller_config)
     if artifact_dir is not None:
         cfg["artifact_dir"] = str(resolve_repo_path(artifact_dir))
@@ -73,16 +64,8 @@ def manifest_for(artifact_dir: str | Path) -> dict | None:
 
 
 def kernel_info(artifact_dir: str | Path = DEFAULT_ARTIFACT) -> str:
-    """A one-line description of the compiled artifact (size, nodes, ports)."""
-    root = resolve_repo_path(artifact_dir)
-    so = root / "lib" / KERNEL_FILENAME
-    manifest = manifest_for(root)
-    if manifest is None:
-        raise FileNotFoundError(f"no compiled kernel at {so} — run `make compile` first")
-    nodes = manifest.get("nodes_total")
-    ops = manifest.get("op_histogram", {})
-    op_brief = ", ".join(f"{k}x{v}" for k, v in sorted(ops.items()))
-    return f"{so}  ({nodes} nodes: {op_brief} · {so.stat().st_size / 1024:.0f} KiB)"
+    """A one-line description of the compiled artifact (path, nodes, size)."""
+    return str(MicroduckPolicy(artifact_dir).info)
 
 
 def drive(
@@ -92,6 +75,7 @@ def drive(
     artifact_dir: str | Path = DEFAULT_ARTIFACT,
     duration_s: float = 5.0,
     use_bam: bool = True,
+    backend: str = "ctypes",
     compare_eager: bool = True,
     sim: MicroduckSim | None = None,
     on_tick: Callable[[int, float, MicroduckSim], None] | None = None,
@@ -100,22 +84,26 @@ def drive(
 
     Args:
         command: 13-D command block (default: all-zero idle).
-        controller_config: The onnx_rl controller TOML.
-        artifact_dir: A ``make compile`` directory (``lib/lib_neural_network.so``
-            + ``graph_data_manifest.json``).
+        controller_config: The onnx_rl controller TOML (source of the reference).
+        artifact_dir: A ``make compile`` directory.
         duration_s: Simulated seconds to run.
         use_bam: Drive the BAM actuator (default) or the MJCF PD gains.
-        compare_eager: Also run the eager interpreter each tick and report the
-            lockstep parity (the correctness claim).
+        backend: ``"ctypes"`` (default) drives with the deployment host;
+            ``"shinro"`` drives with shinro's compiled adapter instead.
+        compare_eager: Run the eager interpreter each tick and report lockstep
+            parity (the correctness claim).
         sim: Use a pre-built sim instead of constructing one.
         on_tick: Called after each tick with ``(step, t, sim)``.
 
     Returns:
         Metrics: ``steps``, ``parity`` (max |kernel - interpreter| over the run,
-        NaN when not compared), ``final_trunk_z``, ``travel_xy``, ``mean_speed``,
-        ``yaw_rate`` (mean |yaw rate| rad/s), ``tilt_deg``.
+        NaN when not compared), ``backend``, ``final_trunk_z``, ``travel_xy``,
+        ``mean_speed``, ``yaw_rate`` (mean |yaw rate| rad/s), ``tilt_deg``.
     """
-    kernel = load_policy(controller_config, artifact_dir=artifact_dir)
+    if backend not in BACKENDS:
+        raise ValueError(f"backend must be one of {BACKENDS}, got {backend!r}")
+
+    kernel = MicroduckPolicy(artifact_dir) if backend == "ctypes" else load_policy(controller_config, artifact_dir=artifact_dir)
     eager = load_policy(controller_config) if compare_eager else None
     if sim is None:
         sim = MicroduckSim(command=command, use_bam=use_bam)
@@ -128,7 +116,13 @@ def drive(
 
     for step in range(n_steps):
         obs = sim.observation()
-        action = np.asarray(kernel.compute(obs), dtype=np.float64).ravel()
+        # Both backends hand back a 14-D float64 action; the kernel's is a
+        # zero-copy view over its preallocated output buffer.
+        action = (
+            np.frombuffer(kernel.step(obs), dtype=np.float64)
+            if backend == "ctypes"
+            else np.asarray(kernel.compute(obs), dtype=np.float64).ravel()
+        )
         if eager is not None:
             reference = np.asarray(eager.compute(obs), dtype=np.float64).ravel()
             parity = max(parity, float(np.max(np.abs(action - reference))))
@@ -143,6 +137,7 @@ def drive(
     travel = float(np.linalg.norm(sim.trunk_position[:2] - start_xy))
     return {
         "steps": n_steps,
+        "backend": backend,
         "parity": parity if eager is not None else float("nan"),
         "final_trunk_z": float(sim.trunk_position[2]),
         "travel_xy": travel,

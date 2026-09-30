@@ -1,0 +1,44 @@
+{
+  "_comment": "On-target (Raspberry Pi 3 B+) measurements of the SAME compiled Microduck walking kernel, produced by the shinro-bench harness (aarch64 cross-build, ctypes + preallocated buffers, the pattern MicroduckPolicy implements). Recorded here so `make footprint` can print laptop-vs-target side by side. Source of truth: Shinro-xyz/shinro-bench result/2026-09-24T2202_policy_microduck_timing.md",
+  "provenance": {
+    "measured_by": "shinro-bench",
+    "source": "result/2026-09-24T2202_policy_microduck_timing.md",
+    "recorded": "2026-09-24T22:02:00Z",
+    "host": "Raspberry Pi 3 B+ (aarch64-linux-gnu)",
+    "policy": "microduck",
+    "hf_repo": "xiaofengzi/microduck-walking-onnx",
+    "so_path": "/home/adilfaisal111/shinro-bench-policies/microduck/lib/libbase.so",
+    "n_ticks": 100000,
+    "deadline_us": 1000
+  },
+  "timing": {
+    "mean_us": 765.23,
+    "median_us": 749.687,
+    "min_us": 733.333,
+    "max_us": 1248.96,
+    "p90_us": 808.073,
+    "p99_us": 856.354,
+    "p999_us": 985.0,
+    "jitter_stddev_us": 30.7194,
+    "jitter_peak_to_peak_us": 515.625,
+    "tick_delta_median_us": 24.583,
+    "deadline_miss_frac": 0.00066
+  },
+  "memory": {
+    "rss_kb": 12984,
+    "vsize_kb": 21360,
+    "peak_kb": 21424,
+    "rss_growth_kb": 4,
+    "minor_faults": 1,
+    "major_faults": 0
+  },
+  "disk": {
+    "so_bytes": 805704,
+    "total_bytes": 817300
+  },
+  "notes": [
+    "rss_growth_kb 4 over 100,000 ticks and 1 minor page fault is the payload of 'preallocate, never allocate in the loop'.",
+    "The same policy measured 2960 us median on an earlier debug build vs 750 us here (ReleaseFast).",
+    "n_state 0 / single state->u port: the MLP shape MicroduckPolicy asserts."
+  ]
+}

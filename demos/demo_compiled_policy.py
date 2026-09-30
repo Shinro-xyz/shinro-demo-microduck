@@ -3,7 +3,8 @@
 The control law is not Python. The ONNX policy was lowered to a dataflow graph
 by ``shinro.codegen.onnx_import``, compiled to ``lib/lib_neural_network.so`` by
 ``shinro build``, and this demo drives MuJoCo from that kernel through the
-``shinro_step`` C ABI:
+``shinro_step`` C ABI — loaded by :class:`~shinro_demo_microduck.policy.MicroduckPolicy`,
+the ctypes host a robot runtime would ship:
 
     sim.observation() ─► [state 61] ─► shinro_step(.so) ─► u ─► action 14 ─► sim.step()
 
@@ -14,6 +15,7 @@ kernel and the interpreter are two implementations of one graph).
     make compile                       # ONNX -> lib/lib_neural_network.so (+ oracle gate)
     python -m demos.demo_compiled_policy            # all commands
     python -m demos.demo_compiled_policy forward    # one command
+    python -m demos.demo_compiled_policy --backend shinro   # A/B the framework's adapter
 
 Output: one composite GIF per command under ``build/demos/`` (3-D view ·
 bird's-eye trunk path · velocity tracking) plus a metrics table.
@@ -36,9 +38,8 @@ from pathlib import Path
 import mujoco
 import numpy as np
 
-import shinro_demo_microduck  # noqa: F401  (importing the package registers the "microduck" preset)
 from shinro_demo_microduck import contract
-from shinro_demo_microduck.host import drive, kernel_info
+from shinro_demo_microduck.host import BACKENDS, drive, kernel_info
 from shinro_demo_microduck.paths import CONTROLLER_CONFIG, DEFAULT_ARTIFACT
 from shinro_demo_microduck.sim import CONTROL_DT, MicroduckSim
 from shinro_demo_microduck.viz import ReplayPanels, compose_h, follow_camera
@@ -94,7 +95,7 @@ def _make_renderer(model):
         return None
 
 
-def replay(name: str, artifact: str, *, use_bam: bool = True, render: bool = True) -> dict:
+def replay(name: str, artifact: str, *, use_bam: bool = True, render: bool = True, backend: str = "ctypes") -> dict:
     """Run one commanded replay from the kernel; return its metrics (with video path)."""
     twist, duration = COMMANDS[name]
     command = contract.build_command(twist=twist)
@@ -123,6 +124,7 @@ def replay(name: str, artifact: str, *, use_bam: bool = True, render: bool = Tru
         artifact_dir=artifact,
         duration_s=duration,
         use_bam=use_bam,
+        backend=backend,
         sim=sim,
         on_tick=on_tick,
     )
@@ -147,6 +149,12 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--artifact", default=str(DEFAULT_ARTIFACT), help="compiled artifact directory")
     parser.add_argument("--no-bam", action="store_true", help="use the MJCF PD gains instead of BAM (actuator mismatch, comparison only)")
     parser.add_argument("--no-video", action="store_true", help="skip the GIF render")
+    parser.add_argument(
+        "--backend",
+        default="ctypes",
+        choices=list(BACKENDS),
+        help="host driving the kernel: 'ctypes' (deployment default) or 'shinro' (framework adapter)",
+    )
     args = parser.parse_args(argv)
 
     try:
@@ -154,13 +162,14 @@ def main(argv: list[str] | None = None) -> int:
     except FileNotFoundError as exc:
         print(f"ERROR: {exc}", file=sys.stderr)
         return 2
+    print(f"host:   {args.backend}  (deployment host = ctypes; 'shinro' is the framework adapter, for A/B)")
 
     names = args.commands or list(COMMANDS)
     rows = []
     for name in names:
         twist, duration = COMMANDS[name]
         print(f"\n=== {name}: twist={twist} ({duration:.0f} s, bam={not args.no_bam}) ===")
-        metrics = replay(name, args.artifact, use_bam=not args.no_bam, render=not args.no_video)
+        metrics = replay(name, args.artifact, use_bam=not args.no_bam, render=not args.no_video, backend=args.backend)
         rows.append((name, metrics))
         print(
             f"  speed={metrics['mean_speed']:.4f} m/s   yaw_rate={metrics['yaw_rate']:.4f} rad/s   "

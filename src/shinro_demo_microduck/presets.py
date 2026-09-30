@@ -1,10 +1,16 @@
 """Registered ``[physics].preset`` factory for the Microduck walk model.
 
 A preset is shinro's plugin seam for turning a scenario's ``[physics]`` section
-into an engine model. Importing this module registers ``"microduck"`` with
-``shinro.factories.registry``; :mod:`shinro_demo_microduck` imports it eagerly,
-so a scenario that declares ``[physics].preset = "microduck"`` resolves as soon
-as the package is imported.
+into an engine model. Importing *this module* registers ``"microduck"`` with
+``shinro.factories.registry``, so a scenario that declares
+``[physics].preset = "microduck"`` is built with::
+
+    shinro build scenarios/<name>.toml --import shinro_demo_microduck.presets
+
+Registration deliberately does **not** happen on ``import shinro_demo_microduck``:
+importing the framework costs ~58 MB RSS, and the compiled-policy host
+(:mod:`shinro_demo_microduck.policy`) is the code that ships to the robot — it
+must stay stdlib-only. See the package docstring.
 
 The Microduck MJCF is a scene that ``<include>``s the robot and keeps its meshes
 in a subdirectory (``<compiler meshdir="assets">``). MuJoCo's
