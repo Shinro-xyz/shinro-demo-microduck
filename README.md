@@ -67,6 +67,78 @@ generators plug into it unchanged, because the tracker only ever sees a
 > training actuator, timing and frame conventions exactly. See
 > [Fidelity](docs/fidelity.md) for what is reproduced and what is not.
 
+## How a command reaches the robot
+
+The tracker is Python running *beside* the kernel, once per tick. It never talks to
+the policy directly: it writes a 13-D command block into the sim, the sim packs that
+block into the 61-D observation, and the observation is the kernel's **only** input.
+The command reaches the robot *inside* the observation, not alongside it.
+
+```
+  configs/trajectories/*.toml             configs/controllers/*.toml
+  type = "microduck_loop"                 type = "microduck_pure_pursuit"
+           │                                        │
+           ▼                                        ▼
+  TrajectoryFactory ─┐                    ControllerFactory ─┐    ← shinro's registries
+           │         │ resolve "type"               │         │ resolve "type"
+           ▼         │                              ▼         │
+    MicroduckLoop ───┘                       PurePursuitTracker
+  (TrajectoryGenerator)                        (Controller)
+           │                                        │
+           │ from_config() ──► (steps, 2) xy        │ set_reference(path)
+           ▼                                        ▼
+     ReferencePath ────────────────────────► compute([x, y, yaw, ẏ])
+       (points + arc length)                          │
+                                                      ▼
+                                         13-D command block
+                                [ twist(3) │ head_pose(4) │ body_pose(6) ]
+                                                      │
+  ═════════════════════════════════ the kernel boundary ═══════════════════════════════
+                                                      │
+                       sim.command[:] = block         │
+                                                      ▼
+  ┌─ MicroduckSim.observation() ───────────────────────────────────────────────────────┐
+  │ 61-D = [ ang_vel(3) │ gravity(3) │ qpos(14) │ qvel(14) │ last_a(14) │ COMMAND(13) ]│
+  │             0:3          3:6        6:20       20:34       34:48         48:61     │
+  │                                                       ▲            ▲               │
+  │                     previous action feeds back ───────┘            │               │
+  │                                       twist 48:51 │ head 51:55 │ body 55:61        │
+  └────────────────────────────────────────────────────────────────────────────────────┘
+                                                      │  obs (61 floats)
+                                                      ▼
+                        MicroduckPolicy.step(obs)      ← ctypes + stdlib, preallocated
+                                                      │
+                        shinro_step(obs[61] → action[14])   ← the compiled .so
+                                                      │
+                                                      ▼  u = 14 joint position OFFSETS
+                        q_target = HOME + u · action_scale(1.0)
+                                                      │
+                                                      ▼
+                        BAM M6 voltage actuator  →  ×10 physics substeps  →  MuJoCo
+                                                      │
+                                                      └──► next tick: x, y, yaw, ẏ
+                                                           back to the tracker
+```
+
+Three things this pins down:
+
+- **The command block is zero-padded, never trimmed.** `twist` is what the walking
+  policy rewards; `head_pose` is a small secondary objective and `body_pose` was
+  trained at weight 0 (kept alive so a later curriculum can use it). The tracker
+  writes `twist` and leaves the other ten entries at zero. Deleting an unused slot
+  would move every byte after it and invalidate the whole policy family.
+- **The action is an offset, not an angle.** `q_target = HOME + action`, with
+  `action_scale = 1.0` read from the ONNX metadata rather than assumed — the policy
+  outputs displacements from the home pose.
+- **`last_action` is fed back** (obs[34:48]). That is why the compiled graph needs no
+  recurrent ports: the policy's own previous output returns to it through the
+  observation.
+
+On the real robot the same chain runs with different ends — the observation is
+assembled from the IMU and servo encoders, and the 14-D action becomes joint targets
+on the Dynamixel bus. The trajectory layer is navigation instead of a preset file;
+the command still reaches the policy the same way, inside the observation.
+
 ## Results at a glance
 
 | stage | artifact | check | measured |

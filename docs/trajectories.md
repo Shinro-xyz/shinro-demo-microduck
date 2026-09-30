@@ -75,6 +75,10 @@ error, and the command:
 `TRAJECTORY_GIF` profile in `demos/demo_compiled_policy.py` is the knob if you want
 them smaller.)
 
+The tracker's output does not go to the policy directly — it is packed into the
+observation, which is the kernel's only input. The end-to-end picture is
+[in the README](../README.md#how-a-command-reaches-the-robot).
+
 ## Why a tracker, not a recorded twist profile
 
 The obvious reading of "preset trajectory" is an open-loop schedule of `(vx, wz)`

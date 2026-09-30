@@ -31,3 +31,20 @@ A command slot an env does not use is ZERO-PADDED, never removed. The walking
 policy only rewards `twist`; `head_pose` is a small secondary objective and
 `body_pose` was trained at weight 0 (kept alive so a later curriculum can use
 it). The demo feeds zeros there and commands `twist`.
+
+## Three things the layout pins down
+
+- **The command block is zero-padded, never trimmed.** `twist` is what the walking
+  policy rewards; `head_pose` is a small secondary objective and `body_pose` was
+  trained at weight 0 (kept alive so a later curriculum can use it). Deleting an
+  unused slot would move every byte after it and invalidate the whole policy family.
+- **The action is an offset, not an angle.** `q_target = HOME + action`, with
+  `action_scale = 1.0` read from the ONNX metadata rather than assumed — the policy
+  outputs displacements from the home pose.
+- **`last_action` is fed back** at `obs[34:48]`. That is why the compiled graph needs
+  no recurrent ports: the policy's own previous output returns to it through the
+  observation.
+
+`COMMAND_BLOCK_SLICES` (the 13-D block) and `COMMAND_SLICES` (where each command
+lands in the 61-D observation) are deliberately separate mappings — see the
+[data flow in the README](../README.md#how-a-command-reaches-the-robot).
