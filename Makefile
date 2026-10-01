@@ -1,7 +1,7 @@
 # shellcheck disable=SC1089,SC2046,SC2068,SC2145,SC2154,SC2276,SC2283,SC2034,SC1091
 # (shellcheck parses this file as shell; the Makefile variables/loops below are not shell)
 
-.PHONY: install test test-quick demo live gif trajectory trajectory-gifs compile run footprint check verify gates interop
+.PHONY: install test test-quick demo live gif media trajectory trajectory-gifs compile run footprint check verify gates interop
 
 # Path to the shinro framework checkout (sibling by default).
 SHINRO ?= ../shinro-python-modules
@@ -17,8 +17,11 @@ install:
 # Compile the walking policy ONNX into a Zig kernel (`lib/lib_neural_network.so`
 # + graph manifest). `shinro build` runs the oracle gate: the graph is lowered,
 # cross-compiled, then checked `.so`-vs-interpreter before the artifact is stamped.
+# Cross-compile with `make compile TARGET=aarch64-linux-gnu`; a non-native target
+# skips the host oracle (see docs/compiled-inference.md).
+TARGET ?= native
 compile:
-	shinro build scenarios/microduck_walking.toml --out build/compiled_policy
+	shinro build scenarios/microduck_walking.toml --out build/compiled_policy --target $(TARGET)
 
 # Watch it: real-time MuJoCo viewer window, keys 0-4 switch the command,
 # R resets, ESC quits. Needs a display (MUJOCO_GL=glfw on a desktop).
@@ -47,6 +50,14 @@ trajectory-gifs:
 	@for t in $(TRAJECTORY_PRESETS); do \
 	  $(PYTHON) -m demos.demo_compiled_policy --trajectory $$t --laps 1 --gif trajectory --out-dir docs/media; \
 	done
+
+# End to end: compile the kernel, then render every GIF the README/docs embed —
+# the walking showcase plus one full lap per trajectory preset, all to docs/media/.
+#   make media            (native kernel + all six GIFs)
+#   make media TARGET=aarch64-linux-gnu
+media: compile
+	$(MAKE) gif
+	$(MAKE) trajectory-gifs
 
 # Per-command GIFs (composite: 3-D view, bird's-eye path, velocity tracking).
 demo:
