@@ -166,6 +166,7 @@ make compile         # ONNX -> lib/lib_neural_network.so (runs the oracle gate)
 make live            # watch it: real-time MuJoCo viewer, keys switch command
 make gif             # the small showcase GIF this README embeds
 make trajectory T=circle   # walk a preset reference path
+make media           # end-to-end: compile + every committed GIF -> docs/media/
 make demo            # per-command GIFs (composite: 3-D view, path, velocity)
 make footprint       # deployment host vs shinro adapter vs onnxruntime (+ on-Pi numbers)
 make check           # framework gate: both components construct from their TOML
@@ -180,6 +181,16 @@ the interpreter** → stamps and verifies the artifact. Nothing is trusted until
 gate passes. On their own, `make check` re-runs the framework's construction gate
 (every component builds through its factory) and `make verify` re-hashes the
 stamped artifact against its deployment record — both run in CI.
+
+Every GIF committed under `docs/media/` comes from one command — it compiles the
+kernel first, then renders the walking showcase and a full lap of each preset
+trajectory:
+
+```bash
+make media                           # compile (native), then all six GIFs
+make media TARGET=aarch64-linux-gnu  # cross-compile first, then the same GIFs
+make media TRAJECTORY_PRESETS=circle # walk GIF + just one trajectory preset
+```
 
 Replay one command, or skip the renderer:
 
