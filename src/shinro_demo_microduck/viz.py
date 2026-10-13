@@ -15,7 +15,15 @@ commanded direction, and the right panel plots the commanded twist against the
 achieved one — the honest picture of what the policy tracked and what it did not.
 """
 
+# pyright: reportAttributeAccessIssue=false, reportOptionalMemberAccess=false
+#   mujoco and Pillow ship no py.typed stubs, and matplotlib's Agg canvas
+#   attributes are not declared on FigureCanvasBase, so Pyright misreports
+#   accesses to their C-extension attributes (and types mujoco.Renderer as
+#   None). The runtime behaviour is correct; this repo's lint gate is ruff.
+
 from __future__ import annotations
+
+from dataclasses import dataclass
 
 import matplotlib
 
@@ -298,6 +306,231 @@ class TrackingPanels:
 
     def frame(self) -> np.ndarray:
         """Render the panels to an RGB array."""
+        self.fig.canvas.draw()
+        return np.asarray(self.fig.canvas.buffer_rgba())[..., :3]
+
+    def close(self) -> None:
+        plt.close(self.fig)
+
+
+# --- offscreen frame capture -------------------------------------------------
+#
+# The 3-D MuJoCo view plus whatever panels a run supplies, composed and written
+# as a GIF. It lives here so every demo that renders (the bare kernel and the
+# Cake plane) shares one grabber. MuJoCo is imported lazily, so importing this
+# module never needs a GL stack.
+
+
+@dataclass(frozen=True)
+class Render:
+    """Frame capture settings. ``COMPACT`` targets a GIF small enough to commit."""
+
+    frame_wh: tuple[int, int] = (512, 512)
+    composite_width: int = 1024
+    every: int = 4  # capture every N control ticks (12.5 fps at 50 Hz)
+    colors: int = 128
+
+    @property
+    def fps(self) -> float:
+        from shinro_demo_microduck.sim import CONTROL_DT
+
+        return 1.0 / (CONTROL_DT * self.every)
+
+
+#: Camera framing: a 25 cm robot at 0.45 m fills a good fraction of the window.
+FOLLOW_DISTANCE = 0.45
+
+#: Small profile for the *walking* showcase GIF (12 s -> ~3 MB).
+COMPACT = Render(frame_wh=(320, 320), composite_width=720, every=5, colors=96)
+
+#: Profile for a whole-lap trajectory GIF (~27 s): fewer frames and colours so a
+#: full closed loop still fits.
+TRAJECTORY_GIF = Render(frame_wh=(256, 256), composite_width=576, every=6, colors=64)
+
+#: Profile for the Cake swap showcase: long enough (~24 s) for several trajectory
+#: segments and their swaps, trimmed so it still commits.
+CAKE = Render(frame_wh=(288, 288), composite_width=704, every=6, colors=64)
+
+#: Render profiles selectable with ``--gif``.
+GIF_PROFILES = {"full": Render(), "compact": COMPACT, "trajectory": TRAJECTORY_GIF, "cake": CAKE}
+
+
+def _fit_width(rgb: np.ndarray, render: Render) -> np.ndarray:
+    """Downscale a composite frame and quantize it, so the GIF stays small."""
+    img = Image.fromarray(np.asarray(rgb)[..., :3])
+    if img.width > render.composite_width:
+        img = img.resize((render.composite_width, round(img.height * render.composite_width / img.width)), Image.BILINEAR)
+    # An adaptive palette is what keeps a photographic render from blowing up
+    # the file; the tracking plots stay perfectly readable quantized.
+    return np.asarray(img.convert("P", palette=Image.ADAPTIVE, colors=render.colors).convert("RGB"))
+
+
+def _make_renderer(model, render: Render):
+    """Create an offscreen renderer, or ``None`` if no GL backend is available.
+
+    MuJoCo's offscreen framebuffer defaults to 640x480, so a larger capture needs
+    a bigger buffer than the scene declares. The vendored scene is left
+    byte-identical to the training asset, so the size is raised on the compiled
+    model here instead of in the XML.
+    """
+    import mujoco
+
+    w, h = render.frame_wh
+    model.vis.global_.offwidth = max(int(model.vis.global_.offwidth), w)
+    model.vis.global_.offheight = max(int(model.vis.global_.offheight), h)
+    try:
+        return mujoco.Renderer(model, width=w, height=h)
+    except Exception as exc:  # pragma: no cover - depends on the host GL stack
+        import sys
+
+        print(
+            f"  (no offscreen renderer: {exc})\n"
+            f"  -> running without video. On a desktop, try MUJOCO_GL=glfw; on a headless\n"
+            f"     box, MUJOCO_GL=egl with a working EGL device.",
+            file=sys.stderr,
+        )
+        return None
+
+
+class FrameGrabber:
+    """Composite-frame capture: the 3-D view plus whatever panels the run supplies.
+
+    Owns only the renderer and the compositing; the panels object is injected, so
+    the same grabber serves the constant-command demo (:class:`ReplayPanels`), the
+    trajectory demo (:class:`TrackingPanels`) and the Cake plane.
+    """
+
+    def __init__(self, sim, render: Render, panels=None) -> None:
+        import mujoco
+
+        self.render = render
+        self.panels = panels
+        self.renderer = _make_renderer(sim.model, render)
+        self.frames: list[np.ndarray] = []
+        self.camera = None
+        if self.renderer is not None:
+            self.camera = mujoco.MjvCamera()
+            follow_camera(self.camera, sim.trunk_position, distance=FOLLOW_DISTANCE)
+
+    @property
+    def enabled(self) -> bool:
+        return self.renderer is not None
+
+    def due(self, step: int) -> bool:
+        """Whether this control step is a capture step."""
+        return self.enabled and step % self.render.every == 0
+
+    def capture(self, sim) -> None:
+        """Render the current state and append a composed frame."""
+        follow_camera(self.camera, sim.trunk_position, distance=FOLLOW_DISTANCE)
+        self.renderer.update_scene(sim.data, camera=self.camera)
+        scene = self.renderer.render()
+        panels = [scene] if self.panels is None else [scene, self.panels.frame()]
+        self.frames.append(_fit_width(compose_h(panels, height=self.render.frame_wh[1]), self.render))
+
+    def save(self, path):
+        """Write the captured frames as a GIF, or return ``None`` if nothing was captured."""
+        if not self.frames:
+            return None
+        import imageio.v3 as iio
+
+        path.parent.mkdir(parents=True, exist_ok=True)
+        iio.imwrite(path, self.frames, duration=1000.0 / self.render.fps, loop=0)
+        return path
+
+    def close(self) -> None:
+        if self.panels is not None:
+            self.panels.close()
+
+
+# --- the Cake plane's panel --------------------------------------------------
+
+#: Colours for consecutive trajectory segments.
+_SEGMENT_COLORS = ("tab:orange", "tab:blue", "tab:green", "tab:purple", "tab:red", "tab:brown")
+
+
+class SwapPanels:
+    """Bird's-eye path coloured by the active trajectory, with swap markers.
+
+    The Cake plane's panel. It shows the path the walk actually traced and, by
+    colour, which trajectory module drove each stretch — the visual answer to
+    "the resident kept running while the trajectory changed". Each swap is marked
+    on the path and, with a dashed line, on the timeline strip that names the
+    module active over time.
+
+    Args:
+        segments: ``[(name, start_seconds), ...]`` in order; the first starts at 0.
+        duration: Run length in seconds (x-limit of the timeline strip).
+    """
+
+    def __init__(self, segments, duration, *, wh: tuple[float, float] = (5.4, 4.7), dpi: int = 100) -> None:
+        self.names = [name for name, _ in segments]
+        self.starts = [float(start) for _, start in segments]
+        self.duration = float(duration)
+        self._xy: list[list[np.ndarray]] = [[] for _ in self.names]
+        self._seg: list[int] = []
+
+        self.fig = plt.figure(figsize=wh, dpi=dpi)
+        gs = self.fig.add_gridspec(2, 1, height_ratios=[3, 1], hspace=0.42)
+        self.ax = self.fig.add_subplot(gs[0, 0])
+        self.ax.set_title("bird's-eye trunk path, coloured by trajectory module", fontsize=11)
+        self.lines = [
+            self.ax.plot([], [], "-", color=_SEGMENT_COLORS[i % len(_SEGMENT_COLORS)], lw=2.3, label=name)[0]
+            for i, name in enumerate(self.names)
+        ]
+        (self.pt_now,) = self.ax.plot([], [], "o", color="black", ms=7, zorder=6)
+        self.ax.plot([0.0], [0.0], "ks", ms=7, label="start")
+        self.ax.set_aspect("equal", adjustable="box")
+        self.ax.set_xlabel("x [m]")
+        self.ax.set_ylabel("y [m]")
+        self.ax.grid(True, alpha=0.3)
+        self.ax.legend(loc="best", fontsize=8, framealpha=0.9)
+
+        self.axt = self.fig.add_subplot(gs[1, 0])
+        for i, name in enumerate(self.names):
+            start = self.starts[i]
+            end = self.starts[i + 1] if i + 1 < len(self.names) else self.duration
+            self.axt.axvspan(start, end, color=_SEGMENT_COLORS[i % len(_SEGMENT_COLORS)], alpha=0.35)
+            self.axt.text((start + end) / 2.0, 0.5, name, ha="center", va="center", fontsize=9)
+            if i > 0:
+                self.axt.axvline(start, color="black", lw=1.2, ls="--")
+        (self.cursor,) = self.axt.plot([0.0, 0.0], [0.0, 1.0], color="black", lw=1.5)
+        self.axt.set_xlim(0.0, self.duration)
+        self.axt.set_ylim(0.0, 1.0)
+        self.axt.set_yticks([])
+        self.axt.set_xlabel("t [s]")
+        self.axt.set_title("trajectory module active over time (dashed = replace-slot swap)", fontsize=9)
+
+    def segment_at(self, t: float) -> int:
+        """Index of the trajectory active at ``t`` seconds."""
+        idx = 0
+        for i, start in enumerate(self.starts):
+            if t >= start:
+                idx = i
+        return idx
+
+    def update(self, t: float, xy: np.ndarray, seg: int) -> None:
+        """Record one tick into segment ``seg`` and redraw."""
+        xy = np.asarray(xy, dtype=np.float64)[:2]
+        self._seg.append(int(seg))
+        self._xy[seg].append(xy)
+        pts = np.array(self._xy[seg])
+        self.lines[seg].set_data(pts[:, 0], pts[:, 1])
+        self.pt_now.set_data([xy[0]], [xy[1]])
+
+        allpts = np.array([p for seg_pts in self._xy for p in seg_pts])
+        span = 0.22 * max(0.4, float(np.ptp(allpts[:, 0])), float(np.ptp(allpts[:, 1]))) + 0.2
+        self.ax.set_xlim(allpts[:, 0].min() - span, allpts[:, 0].max() + span)
+        self.ax.set_ylim(allpts[:, 1].min() - span, allpts[:, 1].max() + span)
+
+        # First tick of a new segment: mark the swap on the path.
+        if len(self._seg) >= 2 and self._seg[-1] != self._seg[-2]:
+            self.ax.plot([xy[0]], [xy[1]], "D", color="black", ms=6, zorder=7)
+
+        self.cursor.set_xdata([t, t])
+
+    def frame(self) -> np.ndarray:
+        """Render the panel to an RGB array."""
         self.fig.canvas.draw()
         return np.asarray(self.fig.canvas.buffer_rgba())[..., :3]
 

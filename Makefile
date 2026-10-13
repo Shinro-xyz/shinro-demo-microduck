@@ -100,16 +100,20 @@ run: compile demo
 # socket. The resident and the capsule are a precompiled Cake release (built in
 # the private Cake tree, published per target); no Cake source lives here.
 #   make fetch-cake            # download + verify the release for this target
-#   make cake                  # circle trajectory, 8 s
-#   make cake TRAJ=slalom SECS=8
-#   make cake SWAP=circle,eight,slalom SECS=9   # switch trajectory live, no restart
+#   make cake                  # circle -> eight -> slalom live, 24 s, rendered
+#   make cake SECS=9           # shorter
+#   make cake SWAP=circle,eight SECS=8
 TRAJ ?= circle
-SWAP ?=
-SECS ?= 8
+SWAP ?= circle,eight,slalom
+SECS ?= 24
+# GIF=cake|full|compact|trajectory, or GIF= to skip. The walk GIF and the
+# swap-handling figure are written to MEDIA_DIR (committed under docs/media/cake/).
+GIF ?= cake
+MEDIA_DIR ?= docs/media/cake
 fetch-cake:
 	cake/fetch-release.sh
 cake:
-	cake/run-microduck.sh --seconds $(SECS) --trajectory $(TRAJ) $(if $(SWAP),--swap $(SWAP))
+	MEDIA_DIR=$(MEDIA_DIR) GIF=$(GIF) cake/run-microduck.sh --seconds $(SECS) --trajectory $(TRAJ) $(if $(SWAP),--swap $(SWAP))
 
 test:
 	$(PYTHON) -m pytest tests/ -v --tb=short

@@ -31,7 +31,7 @@ framework logic (build, trace, oracle, verify all live in the package).
 | `make live` | real-time MuJoCo viewer (`0`–`4` commands, `R` reset, `+`/`-` resize) |
 | `make gif` / `make demo` / `make trajectory T=circle` | offline renders |
 | `make footprint` | deployment host vs onnxruntime: size, RSS, latency (+ on-Pi) |
-| `make cake` | run the policy as a Cake module (Cake resident + live MuJoCo plant; `TRAJ=`, `SWAP=`, `SECS=`) |
+| `make cake` | run the policy as a Cake module (Cake resident + live MuJoCo plant; `TRAJ=`, `SWAP=`, `SECS=`, `GIF=`); default is a 24 s circle→eight→slalom live swap, rendering the walk GIF + the swap figure to `docs/media/cake/` |
 | `make fetch-cake` | download + verify the precompiled Cake release for this target (`x86_64`/`aarch64`) |
 | `make test` / `make test-quick` | full suite / no-sim smoke check |
 

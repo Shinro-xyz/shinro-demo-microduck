@@ -7,18 +7,22 @@ the panels re-annotating when a run switches command mid-flight (a bug that made
 the first showcase GIF advertise the idle command while the robot was walking).
 """
 
+# pyright: reportArgumentType=false, reportIndexIssue=false
+#   matplotlib's stubs type Line2D.get_ydata() as a Buffer union, so indexing
+#   the returned array and float()-ing an element is misreported here. The
+#   assertions are correct at runtime; this repo's lint gate is ruff.
+
 import numpy as np
 import pytest
 
 from demos.demo_compiled_policy import (
     COMMANDS,
-    COMPACT,
     LIVE_KEYS,
     LIVE_QUIT_KEY,
     LIVE_RESET_KEYS,
     SEQUENCE,
-    Render,
 )
+from shinro_demo_microduck.viz import COMPACT, Render
 
 
 def test_live_keys_cover_every_command_in_order():
@@ -80,4 +84,16 @@ def test_panels_keep_the_command_lines_on_screen():
     panels.update(0.0, np.zeros(2), np.zeros(3), 0.0)  # nothing measured yet
     lo, hi = panels.ax_vel.get_ylim()
     assert lo <= -0.4 and hi >= 0.4, f"command line at ±0.4 outside ylim {(lo, hi)}"
+    panels.close()
+
+
+def test_swap_panel_picks_the_active_segment():
+    """The Cake panel colours by whichever trajectory module is active at t."""
+    from shinro_demo_microduck.viz import SwapPanels
+
+    panels = SwapPanels([("circle", 0.0), ("eight", 3.0), ("slalom", 6.0)], duration=9.0)
+    assert panels.segment_at(0.0) == 0
+    assert panels.segment_at(2.99) == 0
+    assert panels.segment_at(3.0) == 1
+    assert panels.segment_at(8.9) == 2
     panels.close()

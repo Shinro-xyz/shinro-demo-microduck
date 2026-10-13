@@ -39,6 +39,11 @@ bound its socket):
     python -m demos.demo_cake_policy --socket /tmp/cake-microduck.sock --seconds 8
 """
 
+# pyright: reportAttributeAccessIssue=false, reportOptionalMemberAccess=false
+#   The render panels and offscreen renderer are optional and typed as None by
+#   Pyright (mujoco has no stubs), so their attributes are misreported. Runtime
+#   behaviour is correct; this repo's lint gate is ruff, not Pyright.
+
 from __future__ import annotations
 
 import os
@@ -57,6 +62,7 @@ import numpy as np
 
 from shinro_demo_microduck import contract
 from shinro_demo_microduck.sim import CONTROL_DT, MicroduckSim
+from shinro_demo_microduck.viz import GIF_PROFILES
 
 #: The command block width (`twist(3)` + `head_pose(4)` + `body_pose(6)`); it is
 #: the trajectory module's, not this process's.
@@ -106,6 +112,9 @@ def run(
     seconds: float,
     use_bam: bool,
     csv_path: Path | None,
+    render=None,
+    out_dir: Path | None = None,
+    segments: list[tuple[str, float]] | None = None,
 ) -> dict:
     # The sim's own `command` field is unused: the trajectory comes from the
     # Cake plane. A zero command keeps the sim's reset state canonical.
@@ -128,6 +137,19 @@ def run(
     rows: list[tuple[float, float, float, float]] = []
     last_action = np.zeros(N_ACTIONS)
 
+    # Optional video: the 3-D walk plus a bird's-eye panel that colours the path
+    # by the trajectory module driving it and marks each live swap.
+    panels = None
+    grabber = None
+    if render is not None:
+        from shinro_demo_microduck.viz import FrameGrabber, SwapPanels
+
+        panels = SwapPanels(segments or [("trajectory", 0.0)], seconds)
+        grabber = FrameGrabber(sim, render, panels)
+        if not grabber.enabled:
+            grabber = None
+            panels = None
+
     # The module reads proprioception and the pose first; prime it with the
     # reset state.
     conn.sendall(SEND_STRUCT.pack(*_state(sim)))
@@ -148,10 +170,21 @@ def run(
             last_action = action
             pos = sim.trunk_position
             rows.append((step * CONTROL_DT, float(pos[0]), float(pos[1]), float(pos[2])))
+            if grabber is not None and grabber.due(step):
+                now = step * CONTROL_DT
+                panels.update(now, pos, panels.segment_at(now))
+                grabber.capture(sim)
     finally:
         conn.close()
         server.close()
         sock_path.unlink(missing_ok=True)
+
+    video = None
+    if grabber is not None:
+        video = grabber.save((out_dir or Path("build/cake/run")) / "microduck_cake_walk.gif")
+        grabber.close()
+        if video is not None:
+            print(f"sim: wrote {video} ({video.stat().st_size / 1e6:.2f} MB)")
 
     pos = sim.trunk_position
     travel = float(np.linalg.norm(pos[:2] - start_xy))
@@ -163,6 +196,7 @@ def run(
         "tilt_deg": float(np.degrees(sim.trunk_tilt)),
         "mean_abs_action": float(np.mean(np.abs(last_action))),
         "nan_obs": bool(not np.all(np.isfinite(sim.observation()))),
+        "video": str(video) if video is not None else None,
     }
 
     if csv_path is not None:
@@ -188,13 +222,32 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--seconds", type=float, default=8.0, help="simulated seconds to run")
     parser.add_argument("--no-bam", action="store_true", help="use the MJCF placeholder PD gains, not BAM")
     parser.add_argument("--csv", default=None, help="write the trunk trajectory here")
+    parser.add_argument(
+        "--gif",
+        choices=sorted(GIF_PROFILES),
+        default=None,
+        help="render a GIF of the walk (needs an offscreen GL backend)",
+    )
+    parser.add_argument("--out-dir", default=None, help="where to write the GIF")
+    parser.add_argument(
+        "--schedule",
+        default=None,
+        help="trajectory segments for the panel, e.g. circle@0,eight@3,slalom@6",
+    )
     args = parser.parse_args(argv)
+
+    segments = None
+    if args.schedule:
+        segments = [(name, float(start)) for name, _, start in (part.partition("@") for part in args.schedule.split(","))]
 
     metrics = run(
         socket_path=args.socket,
         seconds=args.seconds,
         use_bam=not args.no_bam,
         csv_path=Path(args.csv) if args.csv else None,
+        render=GIF_PROFILES[args.gif] if args.gif else None,
+        out_dir=Path(args.out_dir) if args.out_dir else None,
+        segments=segments,
     )
     if metrics["steps"] < 10:
         print("sim: too few steps for a verdict", file=sys.stderr)

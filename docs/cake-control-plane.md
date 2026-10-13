@@ -90,6 +90,26 @@ The policy's `command` requirement is declared `change_policy = "live_snapshot"`
 so it keeps running through the swap and reads the replaceable table under an
 epoch guard (`recv obs → Vm.step → send action` stays one lockstep thread).
 
+## See it: the render and the swap figure
+
+`make cake` (default `SWAP=circle,eight,slalom SECS=24`) renders two artifacts into
+`docs/media/cake/` (`GIF=cake|full|compact|trajectory`, or `GIF=` to skip):
+
+- `microduck_cake_walk.gif` — the 3-D MuJoCo walk (offscreen EGL) beside a
+  bird's-eye panel that **colours the path by the trajectory module driving it**,
+  marks each swap on the path, and carries a timeline strip of the module active
+  over time.
+- `microduck_cake_swap.png` — how Cake ran each swap: the two module bands (the
+  policy running throughout, the trajectory generations advancing), the swap
+  annotations (`replace-slot → …`, `txn COMPLETED`, `session unchanged`), and the
+  update transaction's phases as one flow — closure computed → drain the retiring
+  generation → apply the `live_snapshot` row → publish the binding snapshot →
+  reclaim the retired generation (`docs/event-code-registry.md`).
+
+Both are drawn by the demo's own code (`demos/demo_cake_policy.py` +
+`scripts/plot_cake_swap.py`), from the `trace.csv` and `swaps.json` the run
+already writes.
+
 ## What the Cake path is, and is not
 
 - It does **not** put the control law in Python. The module runs the VM; Python

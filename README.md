@@ -230,10 +230,17 @@ produce the same walk — see [The Cake control plane](docs/cake-control-plane.m
 
 ```bash
 make fetch-cake                    # download + verify the release for this machine
-make cake                          # circle trajectory, 8 s
-make cake TRAJ=slalom SECS=8
-make cake SWAP=circle,eight,slalom # switch the trajectory live, no restart
+make cake                          # circle -> eight -> slalom live, 24 s, rendered
+make cake SECS=9                   # shorter
+make cake SWAP=circle,eight        # a two-trajectory swap
+make cake GIF=                     # skip the render (GIF=cake|full|compact|trajectory)
 ```
+
+`make cake` renders `docs/media/cake/microduck_cake_walk.gif` (the walk, with the
+path coloured by trajectory module and each swap marked) and
+`microduck_cake_swap.png` (how Cake ran each swap, phase by phase).
+
+![The Microduck walk on the Cake plane, switching trajectory modules live](docs/media/cake/microduck_cake_walk.gif)
 
 No Cake code enters this repository and no MuJoCo enters the Cake side: the wire
 is two f64 arrays (the graph's port layout). The resident and the policy capsule

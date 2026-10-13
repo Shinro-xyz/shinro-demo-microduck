@@ -35,6 +35,12 @@ velocity std is wide, so standing there is cheap), and pure turn-in-place was
 rare in its experience. Commands here stay above that threshold; see docs/fidelity.md.
 """
 
+# pyright: reportAttributeAccessIssue=false, reportOptionalMemberAccess=false
+#   mujoco ships no py.typed stubs and the injected render panels are optional,
+#   so Pyright misreports their C-extension attributes (and types the panels and
+#   the offscreen renderer as None). Runtime behaviour is correct; this repo's
+#   lint gate is ruff, not Pyright.
+
 import os
 
 os.environ.setdefault("MUJOCO_GL", "egl")
@@ -44,7 +50,6 @@ import math
 import sys
 import threading
 import time
-from dataclasses import dataclass
 from pathlib import Path
 
 import mujoco
@@ -61,7 +66,15 @@ from shinro_demo_microduck import tracker as _tracker  # noqa: F401
 from shinro_demo_microduck.paths import CONTROLLER_CONFIG, DEFAULT_ARTIFACT
 from shinro_demo_microduck.sim import CONTROL_DT, MicroduckSim
 from shinro_demo_microduck.trajectory import load_loop_config, load_trajectory, progress_speed_for_command
-from shinro_demo_microduck.viz import ReplayPanels, TrackingPanels, compose_h, follow_camera
+from shinro_demo_microduck.viz import (
+    FOLLOW_DISTANCE,
+    GIF_PROFILES,
+    FrameGrabber,
+    Render,
+    ReplayPanels,
+    TrackingPanels,
+    follow_camera,
+)
 
 HERE = Path(__file__).parent.parent
 OUT_DIR = HERE / "build" / "demos"
@@ -93,121 +106,6 @@ LIVE_QUIT_KEY = 256  # GLFW_KEY_ESCAPE
 LIVE_BIGGER_KEYS = (ord("+"), ord("="))
 LIVE_SMALLER_KEYS = (ord("-"), ord("_"))
 LIVE_RESIZE_STEP = 1.25
-
-#: Camera framing: a 25 cm robot at 0.45 m fills a good fraction of the window.
-FOLLOW_DISTANCE = 0.45
-
-
-@dataclass(frozen=True)
-class Render:
-    """Frame capture settings. ``COMPACT`` targets a GIF small enough to commit."""
-
-    frame_wh: tuple[int, int] = (512, 512)
-    composite_width: int = 1024
-    every: int = 4  # capture every N control ticks (12.5 fps at 50 Hz)
-    colors: int = 128
-
-    @property
-    def fps(self) -> float:
-        return 1.0 / (CONTROL_DT * self.every)
-
-
-#: Small profile for the *walking* showcase GIF (12 s -> ~3 MB).
-COMPACT = Render(frame_wh=(320, 320), composite_width=720, every=5, colors=96)
-
-#: Profile for the committed *trajectory* GIF, which has to fit a whole lap
-#: (~27 s, not 12 s). GIF size is frames x pixels x palette, so both are trimmed
-#: from COMPACT: 8.3 fps instead of 10, and 64 colours instead of 96. Choppier
-#: than the walking GIF, but a full closed loop is worth more than smoothness —
-#: and it stays under 5 MB.
-TRAJECTORY_GIF = Render(frame_wh=(256, 256), composite_width=576, every=6, colors=64)
-
-#: Render profiles selectable with ``--gif``.
-GIF_PROFILES = {"full": Render(), "compact": COMPACT, "trajectory": TRAJECTORY_GIF}
-
-
-def _fit_width(rgb: np.ndarray, render: Render) -> np.ndarray:
-    """Downscale a composite frame and quantize it, so the GIF stays small."""
-    from PIL import Image
-
-    img = Image.fromarray(np.asarray(rgb)[..., :3])
-    if img.width > render.composite_width:
-        img = img.resize((render.composite_width, round(img.height * render.composite_width / img.width)), Image.BILINEAR)
-    # An adaptive palette is what keeps a photographic render from blowing up
-    # the file; the tracking plots stay perfectly readable quantized.
-    return np.asarray(img.convert("P", palette=Image.ADAPTIVE, colors=render.colors).convert("RGB"))
-
-
-def _make_renderer(model, render: Render):
-    """Create an offscreen renderer, or ``None`` if no GL backend is available.
-
-    MuJoCo's offscreen framebuffer defaults to 640x480, so a larger capture needs
-    a bigger buffer than the scene declares. The vendored scene is left
-    byte-identical to the training asset, so the size is raised on the compiled
-    model here instead of in the XML.
-    """
-    w, h = render.frame_wh
-    model.vis.global_.offwidth = max(int(model.vis.global_.offwidth), w)
-    model.vis.global_.offheight = max(int(model.vis.global_.offheight), h)
-    try:
-        return mujoco.Renderer(model, width=w, height=h)
-    except Exception as exc:  # pragma: no cover - depends on the host GL stack
-        print(
-            f"  (no offscreen renderer: {exc})\n"
-            f"  -> running without video. On a desktop, try MUJOCO_GL=glfw; on a headless\n"
-            f"     box, MUJOCO_GL=egl with a working EGL device.",
-            file=sys.stderr,
-        )
-        return None
-
-
-class FrameGrabber:
-    """Composite-frame capture: the 3-D view plus whatever panels the run supplies.
-
-    Owns only the renderer and the compositing; the panels object is injected, so
-    the same grabber serves the constant-command demo (:class:`ReplayPanels`) and
-    the trajectory demo (:class:`TrackingPanels`).
-    """
-
-    def __init__(self, sim: MicroduckSim, render: Render, panels=None) -> None:
-        self.render = render
-        self.panels = panels
-        self.renderer = _make_renderer(sim.model, render)
-        self.frames: list[np.ndarray] = []
-        self.camera = None
-        if self.renderer is not None:
-            self.camera = mujoco.MjvCamera()
-            follow_camera(self.camera, sim.trunk_position, distance=FOLLOW_DISTANCE)
-
-    @property
-    def enabled(self) -> bool:
-        return self.renderer is not None
-
-    def due(self, step: int) -> bool:
-        """Whether this control step is a capture step."""
-        return self.enabled and step % self.render.every == 0
-
-    def capture(self, sim: MicroduckSim) -> None:
-        """Render the current state and append a composed frame."""
-        follow_camera(self.camera, sim.trunk_position, distance=FOLLOW_DISTANCE)
-        self.renderer.update_scene(sim.data, camera=self.camera)
-        scene = self.renderer.render()
-        panels = [scene] if self.panels is None else [scene, self.panels.frame()]
-        self.frames.append(_fit_width(compose_h(panels, height=self.render.frame_wh[1]), self.render))
-
-    def save(self, path: Path) -> Path | None:
-        """Write the captured frames as a GIF, or return ``None`` if nothing was captured."""
-        if not self.frames:
-            return None
-        import imageio.v3 as iio
-
-        path.parent.mkdir(parents=True, exist_ok=True)
-        iio.imwrite(path, self.frames, duration=1000.0 / self.render.fps, loop=0)
-        return path
-
-    def close(self) -> None:
-        if self.panels is not None:
-            self.panels.close()
 
 
 def replay(

@@ -22,11 +22,18 @@ SECONDS_TO_RUN="8"
 TRAJECTORY="circle"
 SWAP=""
 BAM_FLAG=""
+# GIF profile (full|compact|trajectory|cake), or empty to skip rendering.
+GIF_PROFILE="${GIF-compact}"
+# Where the GIF and the swap figure go; defaults to the run directory.
+MEDIA_DIR="${MEDIA_DIR-}"
 while [ $# -gt 0 ]; do
     case "$1" in
         --seconds) SECONDS_TO_RUN="$2"; shift 2 ;;
         --trajectory) TRAJECTORY="$2"; shift 2 ;;
         --swap) SWAP="$2"; shift 2 ;;
+        --gif) GIF_PROFILE="$2"; shift 2 ;;
+        --no-gif) GIF_PROFILE=""; shift ;;
+        --media-dir) MEDIA_DIR="$2"; shift 2 ;;
         --no-bam) BAM_FLAG="--no-bam"; shift ;;
         -h | --help) echo "usage: cake/run-microduck.sh [--seconds 8] [--trajectory circle] [--swap circle,eight,slalom]"; exit 0 ;;
         *) md_fail "unrecognised argument '$1'" 5 ;;
@@ -34,6 +41,15 @@ while [ $# -gt 0 ]; do
 done
 [ -n "$SWAP" ] || SWAP="$TRAJECTORY"
 IFS=',' read -r -a TRAJS <<<"$SWAP"
+
+# The trajectory schedule for the render panel: one module per equal segment.
+n_traj=${#TRAJS[@]}
+segment="$(awk -v s="$SECONDS_TO_RUN" -v n="$n_traj" 'BEGIN { printf "%.2f", s / n }')"
+schedule=""
+for idx in "${!TRAJS[@]}"; do
+    start="$(awk -v seg="$segment" -v i="$idx" 'BEGIN { printf "%.2f", seg * i }')"
+    schedule+="${schedule:+,}${TRAJS[$idx]}@$start"
+done
 
 SLUG="${MD_SLUG:-$(md_target_slug)}"
 [ -n "$SLUG" ] || md_fail "no Cake release is published for $(md_arch)" 3
@@ -68,6 +84,8 @@ PAYLOAD="$RUN_DIR/replace.bin"
 
 rm -rf "$RUN_DIR"
 mkdir -p "$RUN_DIR" "$STORE"
+MEDIA_DIR="${MEDIA_DIR:-$RUN_DIR}"
+mkdir -p "$MEDIA_DIR"
 printf '%s' "$SOCK" >"$POLICY_CFG"
 printf '%s' "${TRAJS[0]}" >"$TRAJ_CFG"
 
@@ -109,8 +127,10 @@ cleanup() {
 trap cleanup EXIT
 
 md_say "starting the MuJoCo client on $SOCK"
+gif_args=()
+[ -n "$GIF_PROFILE" ] && gif_args=(--gif "$GIF_PROFILE" --out-dir "$MEDIA_DIR" --schedule "$schedule")
 (cd "$MD_ROOT" && exec "$CLIENT_PY" -m demos.demo_cake_policy \
-    --socket "$SOCK" --seconds "$((SECONDS_TO_RUN + 40))" --csv "$CSV" $BAM_FLAG) \
+    --socket "$SOCK" --seconds "$((SECONDS_TO_RUN + 40))" --csv "$CSV" $BAM_FLAG "${gif_args[@]}") \
     >"$CLIENT_LOG" 2>&1 &
 CLIENT_PID=$!
 md_wait_for_file "$SOCK" 200 || { cat "$CLIENT_LOG"; md_fail "client never bound $SOCK"; }
@@ -129,9 +149,8 @@ traj_uuid="$(md_slot_uuid "$ADMIN_PROBE" "$ADMIN" trajectory)"
 session_before="$(md_status_field "$ADMIN_PROBE" "$ADMIN" session_uuid)"
 md_say "trajectory slot $traj_uuid; session $session_before"
 
-n=${#TRAJS[@]}
-segment="$(awk -v s="$SECONDS_TO_RUN" -v n="$n" 'BEGIN { printf "%.2f", s / n }')"
 i=0
+swap_facts=()
 for t in "${TRAJS[@]}"; do
     i=$((i + 1))
     [ "$i" -eq 1 ] && continue
@@ -148,6 +167,10 @@ PY
     swap_out="$("$ADMIN_PROBE" request "$ADMIN" replace-slot --uuid "$swap_uuid" --payload "$PAYLOAD" 2>&1)"
     printf '%s\n' "$swap_out" | sed 's/^/microduck-cake: /'
     printf '%s\n' "$swap_out" | grep -q '^status ok' || md_fail "replace-slot to '$t' was refused"
+    phase="$(printf '%s\n' "$swap_out" | sed -nE 's/^transaction_phase (.*)$/\1/p' | head -1)"
+    [ -n "$phase" ] || phase="answered"
+    at_s="$(awk -v seg="$segment" -v k="$((i - 1))" 'BEGIN { printf "%.2f", seg * k }')"
+    swap_facts+=("{\"index\":$((i - 1)),\"from\":\"${TRAJS[$((i - 2))]}\",\"to\":\"$t\",\"at_s\":$at_s,\"phase\":\"$phase\"}")
 done
 sleep "$segment"
 
@@ -161,12 +184,41 @@ traj_uuid_after="$(md_slot_uuid "$ADMIN_PROBE" "$ADMIN" trajectory)"
 [ "$traj_uuid_after" = "$traj_uuid" ] || md_fail "the trajectory slot uuid changed across the swaps"
 md_say "session unchanged ($session_after); trajectory slot $traj_uuid unchanged"
 
+# The facts behind the swap figure: the schedule and each swap's outcome.
+if [ "${#swap_facts[@]}" -gt 0 ]; then
+    "$CLIENT_PY" - "$RUN_DIR/swaps.json" "$SECONDS_TO_RUN" "$session_before" "$schedule" "${swap_facts[@]}" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+out = sys.argv[1]
+sched = [[p.split("@")[0], float(p.split("@")[1])] for p in sys.argv[4].split(",")]
+record = {
+    "duration_s": float(sys.argv[2]),
+    "session": sys.argv[3],
+    "schedule": sched,
+    "swaps": [json.loads(f) for f in sys.argv[5:]],
+}
+try:
+    Path(out).write_text(json.dumps(record, indent=2))
+except OSError as exc:
+    print(f"could not write {out}: {exc}", file=sys.stderr)
+    raise SystemExit(1)
+PY
+fi
+
 kill -TERM "$RESIDENT_PID" 2>/dev/null || true
 wait "$RESIDENT_PID" 2>/dev/null || true
 RESIDENT_PID=""
 wait "$CLIENT_PID" || true
 CLIENT_PID=""
 trap - EXIT
+
+# The swap-handling figure: the path by module, and the transaction Cake ran
+# for each swap (phase by phase). Written next to the GIF.
+if [ -n "$GIF_PROFILE" ] && [ -f "$RUN_DIR/swaps.json" ]; then
+    "$CLIENT_PY" "$MD_ROOT/scripts/plot_cake_swap.py" --run-dir "$RUN_DIR" --out "$MEDIA_DIR/microduck_cake_swap.png" 2>&1 | sed 's/^/microduck-cake: /' || true
+fi
 
 echo "=== client ==="
 cat "$CLIENT_LOG"
