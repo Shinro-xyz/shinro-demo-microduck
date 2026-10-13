@@ -31,6 +31,8 @@ framework logic (build, trace, oracle, verify all live in the package).
 | `make live` | real-time MuJoCo viewer (`0`–`4` commands, `R` reset, `+`/`-` resize) |
 | `make gif` / `make demo` / `make trajectory T=circle` | offline renders |
 | `make footprint` | deployment host vs onnxruntime: size, RSS, latency (+ on-Pi) |
+| `make cake` | run the policy as a Cake module (Cake resident + live MuJoCo plant; `TRAJ=`, `SWAP=`, `SECS=`) |
+| `make fetch-cake` | download + verify the precompiled Cake release for this target (`x86_64`/`aarch64`) |
 | `make test` / `make test-quick` | full suite / no-sim smoke check |
 
 - Single test: `python -m pytest tests/test_x.py -v -k "name"`.
@@ -80,6 +82,15 @@ stamp → verify. The ONNX conversion is `shinro/codegen/onnx_import.py`
 - **Policy constraints, all measured:** ~0.25 m/s deadband (slow = stand, not
   crawl), non-monotonic yaw command response, no turn-in-place, feet-only
   collision. The tracker respects the first two; see `docs/fidelity.md`.
+- **The Cake demo consumes a precompiled release, not the private tree.** `make
+  cake` fetches a signed Cake release (resident + policy and trajectory capsules,
+  per target) into `cake/release/<slug>/` and runs it with
+  `demos/demo_cake_policy.py` over a Unix socket. The trajectory is a swappable
+  Cake module; `make cake SWAP=circle,eight,slalom` replaces it live with
+  `replace-slot` and the resident never restarts. The Cake ABI, the modules and
+  their build live in the private `shinro-bench/cake` tree; **do not add Cake
+  source, a `cake_*` header, or a descriptor to this repo** — the wire is the
+  ABI-free port layout. See `cake/README.md` and `docs/cake-control-plane.md`.
 - **MuJoCo assets are vendored verbatim** — don't edit `assets/microduck/`. The
   home pose is *not* self-stabilizing; the policy balances (a test pins this, so
   don't "fix" it by stiffening the hold).

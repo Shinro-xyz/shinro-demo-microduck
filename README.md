@@ -172,6 +172,8 @@ make footprint       # deployment host vs shinro adapter vs onnxruntime (+ on-Pi
 make check           # framework gate: both components construct from their TOML
 make verify          # framework gate: the stamped artifact matches its record
 make interop         # the same .so through C, C++, Zig, Rust, and Python
+make fetch-cake      # the precompiled Cake release (resident + policy capsule) for this target
+make cake            # the same policy on the Cake control plane, MuJoCo over a socket
 make test            # contract, sim, host, parity, kernel, components
 ```
 
@@ -216,11 +218,35 @@ the command, `R` resets, `+`/`-` resize the window. It needs a display
 [Watching it](docs/watching.md), including full-lap GIFs of every preset
 reference path.
 
+## The Cake control plane
+
+The compiled policy can also run as a **Cake module** on the Cake supervisory
+kernel instead of through the Linux `dlopen` host: the resident admits the
+capsule, the module owns its thread, and this repo's MuJoCo client is the plant
+on the far side of a Unix-domain socket. The trajectory is a second, **swappable**
+Cake module, so `make cake SWAP=circle,eight,slalom` changes the walk live with
+`replace-slot` while the resident keeps running. Both paths run the same graph and
+produce the same walk — see [The Cake control plane](docs/cake-control-plane.md).
+
+```bash
+make fetch-cake                    # download + verify the release for this machine
+make cake                          # circle trajectory, 8 s
+make cake TRAJ=slalom SECS=8
+make cake SWAP=circle,eight,slalom # switch the trajectory live, no restart
+```
+
+No Cake code enters this repository and no MuJoCo enters the Cake side: the wire
+is two f64 arrays (the graph's port layout). The resident and the policy capsule
+are a **precompiled release** built in the private [`shinro-bench/cake`](../shinro-bench/cake)
+tree and published per target (`x86_64` and `aarch64`); this repository only
+fetches and runs it.
+
 ## Docs
 
 | document | what's in it |
 | -------- | ------------ |
 | [compiled-inference.md](docs/compiled-inference.md) | the trace → compose → lower → oracle chain, and why the normalizer is baked in |
+| [cake-control-plane.md](docs/cake-control-plane.md) | the same policy as a Cake module: the resident, the socket, the lockstep loop, and the fidelity check |
 | [policy-contract.md](docs/policy-contract.md) | the 61-D observation and 14-D action layout, verified against the ONNX metadata |
 | [footprint.md](docs/footprint.md) | deployment host vs shinro adapter vs onnxruntime: install size, RSS, latency, and the on-Pi numbers |
 | [interop/README.md](interop/README.md) | the same kernel through C, C++, Zig, Rust and Python — the C ABI, not the Python binding |

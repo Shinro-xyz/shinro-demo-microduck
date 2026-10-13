@@ -1,7 +1,7 @@
 # shellcheck disable=SC1089,SC2046,SC2068,SC2145,SC2154,SC2276,SC2283,SC2034,SC1091
 # (shellcheck parses this file as shell; the Makefile variables/loops below are not shell)
 
-.PHONY: install test test-quick demo live gif media trajectory trajectory-gifs compile run footprint check verify gates interop
+.PHONY: install test test-quick demo live gif media trajectory trajectory-gifs compile run cake fetch-cake footprint check verify gates interop
 
 # Path to the shinro framework checkout (sibling by default).
 SHINRO ?= ../shinro-python-modules
@@ -93,6 +93,23 @@ interop:
 
 # Rebuild the kernel and immediately replay it in MuJoCo.
 run: compile demo
+
+# The same walk with the policy on the **Cake control plane** instead of the
+# Linux dlopen host: the Cake resident admits the shipped policy capsule, the
+# module owns its thread, and this repo's MuJoCo client is the plant across a
+# socket. The resident and the capsule are a precompiled Cake release (built in
+# the private Cake tree, published per target); no Cake source lives here.
+#   make fetch-cake            # download + verify the release for this target
+#   make cake                  # circle trajectory, 8 s
+#   make cake TRAJ=slalom SECS=8
+#   make cake SWAP=circle,eight,slalom SECS=9   # switch trajectory live, no restart
+TRAJ ?= circle
+SWAP ?=
+SECS ?= 8
+fetch-cake:
+	cake/fetch-release.sh
+cake:
+	cake/run-microduck.sh --seconds $(SECS) --trajectory $(TRAJ) $(if $(SWAP),--swap $(SWAP))
 
 test:
 	$(PYTHON) -m pytest tests/ -v --tb=short
