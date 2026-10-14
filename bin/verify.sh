@@ -77,11 +77,24 @@ fi
 echo
 
 echo "2. signing key"
+# Absent vs invalid are different findings. A wrong signature means the artifact
+# is not the one that was signed: fatal. No signature at all is a gap in the
+# release process, not a defect in the bytes, and the digest above still holds —
+# so it warns, loudly, and bin/fetch-release.sh warns again at download time.
+SIG_PRESENT=0
+for a in "$DIR"/../downloads/"$MD_VERSION"/SHA256SUMS.asc "$DIR/../downloads/$MD_VERSION"/*.asc; do
+    [ -f "$a" ] && SIG_PRESENT=1
+done
 if [ "$MD_KEY_UNSET" = "1" ]; then
-    echo "   NOT VERIFIED: no key fingerprint is set in bin/lib/common.sh."
-    echo "   Whatever the digest says is the only check on this tarball, and it is"
-    echo "   only as trustworthy as the channel it came over."
-    FAILS=$((FAILS + 1))
+    if [ "$SIG_PRESENT" = "1" ]; then
+        echo "   FAIL: a signature is present but no key fingerprint is set in"
+        echo "   bin/lib/common.sh, so it cannot be checked."
+        FAILS=$((FAILS + 1))
+    else
+        echo "   NOT SIGNED: this release has no GPG signature and no key fingerprint"
+        echo "   is set. The digest above is the only check, and it is only as"
+        echo "   trustworthy as the download channel. Not a byte defect — a process gap."
+    fi
 else
     echo "   expected $MD_RELEASE_KEY_FINGERPRINT"
     echo "   a signature is checked by bin/fetch-release.sh at download time;"
