@@ -90,7 +90,7 @@ stamp → verify. The ONNX conversion is `shinro/codegen/onnx_import.py`
   `replace-slot` and the resident never restarts. The Cake ABI, the modules and
   their build live in the private `shinro-bench/cake` tree; **do not add Cake
   source, a `cake_*` header, or a descriptor to this repo** — the wire is the
-  ABI-free port layout. See `cake/README.md` and `docs/cake-control-plane.md`.
+  ABI-free port layout. See `bin/README.md` and `docs/cake-control-plane.md`.
 - **MuJoCo assets are vendored verbatim** — don't edit `assets/microduck/`. The
   home pose is *not* self-stabilizing; the policy balances (a test pins this, so
   don't "fix" it by stiffening the hold).

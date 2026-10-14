@@ -3,14 +3,23 @@
 
 .PHONY: install test test-quick demo live gif media trajectory trajectory-gifs compile run cake fetch-cake footprint check verify gates interop
 
-# Path to the shinro framework checkout (sibling by default).
+# The shinro framework is pinned to a PUBLISHED release so a fresh clone works
+# with no sibling checkout. Bump SHINRO_VERSION to track a newer tag.
+SHINRO_VERSION ?= v0.3.0
+SHINRO_WHEEL ?= https://github.com/Shinro-xyz/shinro-python-modules/releases/download/$(SHINRO_VERSION)/shinro-$(SHINRO_VERSION:v%=%)-py3-none-any.whl
+# Path to a local shinro checkout, for `make install-editable`.
 SHINRO ?= ../shinro-python-modules
 # Interpreter for the demo/tests. Override when the deps live in a venv:
 #   make demo PYTHON=.venv/bin/python
 PYTHON ?= python3
 
-# Install the framework checkout + this repo's extras.
+# The documented install: the pinned release. No sibling checkout needed.
 install:
+	pip install "shinro[onnx-rl] @ $(SHINRO_WHEEL)"
+	pip install -e ".[mujoco,media,dev]"
+
+# Local development against a working tree instead of the pinned release.
+install-editable:
 	pip install -e "$(SHINRO)[onnx-rl]"
 	pip install -e ".[mujoco,media,dev]"
 
@@ -114,9 +123,15 @@ MEDIA_DIR ?= docs/media/cake
 # the duck at its swap) instead of the world-fixed ones.
 ANCHOR ?=
 fetch-cake:
-	cake/fetch-release.sh
+	bin/fetch-release.sh
+# Is the fetched tarball shippable? Checks the dependency floor and scans for
+# build-tree paths. A tarball that fails either one must not be published.
+cake-verify:
+	bin/verify.sh
+cake-doctor:
+	bin/doctor.sh
 cake:
-	MEDIA_DIR=$(MEDIA_DIR) GIF=$(GIF) ANCHOR=$(ANCHOR) cake/run-microduck.sh --seconds $(SECS) --trajectory $(TRAJ) $(if $(SWAP),--swap $(SWAP))
+	MEDIA_DIR=$(MEDIA_DIR) GIF=$(GIF) ANCHOR=$(ANCHOR) bin/run-demo.sh --seconds $(SECS) --trajectory $(TRAJ) $(if $(SWAP),--swap $(SWAP))
 
 test:
 	$(PYTHON) -m pytest tests/ -v --tb=short

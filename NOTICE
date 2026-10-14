@@ -1,0 +1,85 @@
+shinro-demo-microduck
+
+Copyright 2026 Shinro SAS.
+
+Three different licences meet in this repository. Read the section that applies
+to what you are using.
+
+
+1. This repository's own code
+-----------------------------
+
+The demo code — the MuJoCo scene, the observation contract, the BAM actuator
+mirror, the deployment host, the trackers, the scripts under `bin/`, the tests
+and the documentation — is licensed under the **Apache License, Version 2.0**.
+The full text is in `LICENSE`.
+
+
+2. The Cake kernel and the precompiled release bundles — NOT Apache-2.0
+-----------------------------------------------------------------------
+
+The scripts under `bin/` fetch and run a **precompiled Cake release**: the
+resident (the control plane), `admin-probe`, `cake-pack`, and the policy and
+trajectory capsules. Those binaries are built from Shinro SAS's **private**
+sources. The kernel is **commercially copyrighted and closed source**, and the
+binaries are **distributed as-is**, without source and without warranty of any
+kind, express or implied. The public position is stated at
+https://shinro.dev/licensing.
+
+**The Apache License, Version 2.0 grant in `LICENSE` does not extend to those
+binaries.** No Cake source, ABI header or descriptor is distributed from this
+repository; `bin/` contains a fetch-and-run shim only.
+
+The scripts under `bin/` carry a Business Source License 1.1 header, because
+they are the fetcher and runner for that closed kernel rather than part of this
+repository's Apache-2.0 code. That header and this section should agree; if they
+ever disagree, this section and https://shinro.dev/licensing are the position,
+and the header is the bug.
+
+A reader who wants the polished, fully-noticed demo — with a `LICENSE`,
+`LICENSE-NOTE.md`, `LIMITATIONS.md`, `SAFETY.md`, `SECURITY.md` and signed,
+gated releases — should look at the sibling public demonstration of the same
+kernel on a different robot: https://github.com/shinro-dev/kiwi-cake-demo.
+
+
+3. The Microduck robot (Pollen Robotics) — Apache-2.0, NOT Shinro's
+-------------------------------------------------------------------
+
+**The robot in this demo is not Shinro's.** Microduck is Pollen Robotics'
+open-source biped. The following material is redistributed here verbatim so the
+replay runs the same asset the policy was trained on, and is licensed under the
+**Apache License, Version 2.0** by Pollen Robotics:
+
+    Microduck MJCF and mesh set
+      in this repo   src/shinro_demo_microduck/assets/microduck/  (89 files)
+      upstream       https://github.com/pollen-robotics/microduck
+                     https://github.com/pollen-robotics/microduck_rl  (training)
+      licence        Apache-2.0, (c) Pollen Robotics
+
+    Microduck walking policy (BEST_alpha_walking.onnx)
+      in this repo   models/microduck/BEST_alpha_walking.onnx
+      upstream       https://huggingface.co/pollen-robotics/microduck-policies
+      licence        Apache-2.0, (c) Pollen Robotics
+
+    The licence text is reproduced in THIRD_PARTY_LICENSES/pollen-microduck/.
+
+Attribution for Pollen Robotics is required by Apache-2.0 §4 and is not
+optional. Do not edit the vendored `assets/microduck/` tree; it is byte-for-byte
+what the policy was trained against.
+
+If you arrived here from a copy of the policy on a Hugging Face re-upload rather
+than Pollen's own repository, prefer the canonical source above: a re-upload
+grants no licence of its own.
+
+Pollen Robotics is not affiliated with Shinro SAS and has not endorsed this
+demo.
+
+
+4. Runtime dependencies — installed, not redistributed
+-------------------------------------------------------
+
+`mujoco`, `numpy`, `matplotlib`, `imageio` and `Pillow` are installed by the
+user via the extras in `pyproject.toml` and are **not** redistributed here.
+`better-actuator-models` (BAM) is a pinned pip dependency, mirror-referenced so
+the replay runs the same actuator model training used. Their own licences apply;
+MuJoCo's is Apache License 2.0.

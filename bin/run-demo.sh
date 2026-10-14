@@ -1,9 +1,8 @@
 #!/usr/bin/env bash
 # Copyright 2026 Shinro SAS. Licensed under the Business Source License 1.1; see LICENSE.
 #
-# cake/run-microduck.sh: run the Microduck walking demo on the Cake control
-# plane, from a precompiled Cake release, and optionally switch trajectories
-# live.
+# bin/run-demo.sh: run the Microduck walking demo on the Cake control plane, from
+# a precompiled Cake release, and optionally switch trajectories live.
 #
 # Two Cake modules, one resident: the **policy** (owns the sim socket, runs the
 # VM in lockstep) and a **trajectory** provider (emits the 13-D command block the
@@ -12,8 +11,8 @@
 # ticking, and the consumer's read of the replaceable command table stays
 # epoch-guarded. That is the swappability the demo is here to show.
 #
-#   cake/fetch-release.sh
-#   cake/run-microduck.sh [--seconds 8] [--trajectory circle] [--swap circle,eight,slalom]
+#   bin/fetch-release.sh
+#   bin/run-demo.sh [--seconds 8] [--trajectory circle] [--swap circle,eight,slalom]
 set -euo pipefail
 # shellcheck source=lib/common.sh
 . "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib/common.sh"
@@ -32,10 +31,10 @@ while [ $# -gt 0 ]; do
         --trajectory) TRAJECTORY="$2"; shift 2 ;;
         --swap) SWAP="$2"; shift 2 ;;
         --gif) GIF_PROFILE="$2"; shift 2 ;;
-        --no-gif) GIF_PROFILE=""; shift ;;
+        --no-gif | --no-render) GIF_PROFILE=""; shift ;;
         --media-dir) MEDIA_DIR="$2"; shift 2 ;;
         --no-bam) BAM_FLAG="--no-bam"; shift ;;
-        -h | --help) echo "usage: cake/run-microduck.sh [--seconds 8] [--trajectory circle] [--swap circle,eight,slalom]"; exit 0 ;;
+        -h | --help) echo "usage: bin/run-demo.sh [--seconds 8] [--trajectory circle] [--swap circle,eight,slalom] [--no-render]"; exit 0 ;;
         *) md_fail "unrecognised argument '$1'" 5 ;;
     esac
 done
@@ -74,10 +73,17 @@ for t in "${TRAJS[@]}"; do
         md_fail "the release has no trajectory '$t' (want circle/eight/slalom/forward) in $BUNDLE/caps" 5
 done
 
-if [ -x "$MD_ROOT/.venv/bin/python" ]; then
+# An explicit PYTHON wins over a .venv. The other order is a trap: a stale
+# .venv silently shadows the interpreter the user installed into, and the run
+# fails with ModuleNotFoundError on a package that was just installed
+# successfully. Override with `make cake PYTHON=.venv/bin/python` when the deps
+# really do live in the venv.
+if [ -n "${PYTHON:-}" ]; then
+    CLIENT_PY="$PYTHON"
+elif [ -x "$MD_ROOT/.venv/bin/python" ]; then
     CLIENT_PY="$MD_ROOT/.venv/bin/python"
 else
-    CLIENT_PY="${PYTHON:-python3}"
+    CLIENT_PY="python3"
 fi
 
 RUN_DIR="$MD_STATE/run"

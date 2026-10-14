@@ -1,6 +1,6 @@
 """Draw how the Cake resident handles a live ``replace-slot`` swap.
 
-Reads the run artifacts written by ``cake/run-microduck.sh`` — ``swaps.json`` (the
+Reads the run artifacts written by ``bin/run-demo.sh`` — ``swaps.json`` (the
 schedule the runner drove and each swap's outcome) and ``trace.csv`` (the path the
 walk actually traced) — and writes one figure with two panels:
 

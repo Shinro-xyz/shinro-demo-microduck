@@ -61,7 +61,7 @@ the bundle is elsewhere:
 
 ```bash
 MD_RELEASE_DIR=/path/with/release make cake
-cake/fetch-release.sh --from /path/to/tarballs --version v0.1.0
+bin/fetch-release.sh --from /path/to/tarballs --version v0.1.0
 ```
 
 ## Switch trajectories live, without turning off Cake
