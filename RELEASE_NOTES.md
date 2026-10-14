@@ -16,8 +16,10 @@ The precompiled Cake release `shinro-demo-microduck` fetches. Two assets:
 - `caps/trajectory_{forward,circle,eight,slalom}.cakecap` and their four `_anchor` variants — the swappable trajectory modules
 - `LICENSE`, `NOTICE-cake-binaries.txt`, `VERSION`
 
-`x86_64` only. **No `aarch64` bundle is published yet**, so the Raspberry Pi row of
-`docs/targets.md` cannot be satisfied; `bin/doctor.sh` says so on a Pi.
+`x86_64` only. This demonstration is a **desktop simulation** by design, so there is no
+`aarch64` bundle and the Raspberry Pi row of `docs/targets.md` does not apply to the Cake
+release; `bin/doctor.sh` says so plainly on a Pi. (The bare compiled kernel does still
+cross-compile to `aarch64`.)
 
 ## Try it
 

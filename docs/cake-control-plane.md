@@ -55,9 +55,11 @@ the trajectory. The trace lands in `build/cake/run/trace.csv` (`t,x,y,z,cross_tr
 — the trunk path plus the per-tick cross-track error against the active module's
 reference).
 
-Both `x86_64` (a MuJoCo desktop) and `aarch64` (a 64-bit Pi) are published;
-`fetch-release.sh` picks the tarball for `uname -m`. Override the location when
-the bundle is elsewhere:
+This is a **desktop simulation**: `x86_64` is the only published target, and
+`fetch-release.sh` picks it for `uname -m`. (The bare compiled kernel also
+cross-compiles to `aarch64` — `make compile TARGET=aarch64-linux-gnu` — but the
+Cake control plane is not published for a Pi.) Override the location when the
+bundle is elsewhere:
 
 ```bash
 MD_RELEASE_DIR=/path/with/release make cake
@@ -109,7 +111,8 @@ epoch guard (`recv obs → Vm.step → send action` stays one lockstep thread).
   `txn COMPLETED`, `session unchanged`), and the update transaction's phases as
   one flow — closure computed → drain the retiring generation → apply the
   `live_snapshot` row → publish the binding snapshot → reclaim the retired
-  generation (`docs/event-code-registry.md`).
+  generation. (The resident's event codes are its own; they live in the private
+  `shinro-bench/cake` tree, not in this repository.)
 
 Both are drawn by the demo's own code (`demos/demo_cake_policy.py` +
 `scripts/plot_cake_swap.py`), from the `trace.csv` and `swaps.json` the run

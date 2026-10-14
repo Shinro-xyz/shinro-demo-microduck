@@ -28,14 +28,15 @@ make cake SWAP=circle,eight,slalom SECS=9   # switch trajectory live, no restart
 Or directly:
 
 ```bash
-bin/fetch-release.sh                          # detects x86_64 or aarch64
+bin/fetch-release.sh                          # resolves the target (x86_64)
 bin/doctor.sh                                # can this machine run the binaries?
 bin/verify.sh                                # re-check the release, and gate it
 bin/run-demo.sh --seconds 8 --trajectory circle
 ```
 
-Both targets are published — `x86_64` (a MuJoCo desktop) and `aarch64` (a 64-bit
-Pi). `fetch-release.sh` picks the tarball for `uname -m`.
+This is a **desktop simulation**, so `x86_64` is the only published target and
+`fetch-release.sh` picks it for `uname -m`. Name `--target aarch64` and it tells you
+why there is no Pi bundle rather than letting the download 404.
 
 The trajectory is a **swappable Cake module**: `make cake SWAP=circle,eight,slalom`
 switches it live with `replace-slot` while the robot walks, and the resident never

@@ -185,8 +185,8 @@ with `make cake MEDIA_DIR=docs/media/cake`):
 No Cake code enters this repository and no MuJoCo enters the Cake side: the wire is
 two little-endian f64 arrays (the graph's own port layout, plus the pose the
 trajectory needs). The resident and the capsules are a **precompiled release** built
-in the private [`shinro-bench/cake`](../shinro-bench/cake) tree and published per
-target (`x86_64` and `aarch64`); this repository only fetches and runs it. There is
+in the private [`shinro-bench/cake`](../shinro-bench/cake) tree and published for
+`x86_64` — this is a desktop simulation; this repository only fetches and runs it. There is
 no `cake_*` header, no entry symbol and no lifecycle callback here — see
 [The Cake control plane](docs/cake-control-plane.md).
 

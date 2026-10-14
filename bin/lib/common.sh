@@ -52,8 +52,11 @@ md_need_tool() { command -v "$1" >/dev/null 2>&1 || md_fail "$1 is not on PATH; 
 md_arch() { uname -m; }
 
 md_target_slug() {
-    # The release tarball slug for this machine. Two are published: x86_64 (the
-    # desktop, including the offscreen render) and aarch64 (a 64-bit Pi).
+    # The release tarball slug for this machine. This demonstration is a DESKTOP
+    # simulation: x86_64 is the only published target. aarch64 is still resolved
+    # so that the scripts say something useful on a Pi rather than building a URL
+    # that 404s; fetch-release.sh refuses it with an explanation unless the
+    # target is named explicitly.
     case "$(md_arch)" in
         x86_64 | amd64) echo x86_64 ;;
         aarch64 | arm64) echo aarch64 ;;
@@ -115,7 +118,7 @@ md_check_binaries() {
 
 md_require_bundle() {
     local dir
-    dir="$(md_binaries_dir)" || md_fail "no Cake release is published for $(md_arch); x86_64 and aarch64 only" 3
+    dir="$(md_binaries_dir)" || md_fail "no Cake release is published for $(md_arch); this demonstration is a desktop (x86_64) simulation" 3
     md_check_binaries "$dir"
     printf '%s' "$dir"
 }

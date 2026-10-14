@@ -9,7 +9,7 @@
 # and trajectory capsules. Nothing is extracted before the digest checks pass.
 #
 # Options:
-#   --target SLUG     x86_64 | aarch64 (default: detected)
+#   --target SLUG     x86_64 (the only published target)
 #   --version vX.Y.Z  (default: this checkout's VERSION)
 #   --from DIR        use a tarball already downloaded into DIR (offline)
 set -uo pipefail
@@ -24,7 +24,7 @@ while [ $# -gt 0 ]; do
         --target) SLUG="${2:?--target needs a slug}"; shift 2 ;;
         --version) VERSION="${2:?--version needs a value}"; shift 2 ;;
         --from) FROM="${2:?--from needs a directory}"; shift 2 ;;
-        -h | --help) echo "usage: bin/fetch-release.sh [--target x86_64|aarch64] [--version vX.Y.Z] [--from DIR]"; exit 0 ;;
+        -h | --help) echo "usage: bin/fetch-release.sh [--target x86_64] [--version vX.Y.Z] [--from DIR]"; exit 0 ;;
         *) md_fail "unrecognised argument '$1'" 5 ;;
     esac
 done
@@ -34,14 +34,23 @@ md_need_tool sha256sum "coreutils ships it"
 md_need_tool curl "it downloads the release"
 md_need_tool timeout "it bounds every network wait"
 
+TARGET_EXPLICIT=0
 if [ -z "$SLUG" ]; then
     SLUG="$(md_target_slug)"
-    [ -n "$SLUG" ] || md_fail "$(md_arch) is not a published target; x86_64 and aarch64 are (pass --target if you know what you are doing)" 3
+    [ -n "$SLUG" ] || md_fail "$(md_arch) is not a published target; this demonstration is a desktop (x86_64) simulation" 3
     md_say "detected $(md_arch), target $SLUG"
+else
+    TARGET_EXPLICIT=1
 fi
 case "$SLUG" in
-    x86_64 | aarch64) : ;;
-    *) md_fail "unknown target slug '$SLUG' (x86_64 or aarch64)" 5 ;;
+    x86_64) : ;;
+    aarch64)
+        # Only reached by explicit --target now. Say the thing that is true,
+        # rather than letting the download 404 and look like a broken release.
+        [ "$TARGET_EXPLICIT" = "1" ] || md_fail "no Cake release is published for aarch64. This demonstration is a desktop (x86_64) simulation: the Cake control plane is not published for a Raspberry Pi or any other board. The *compiled kernel* can still be cross-compiled with 'make compile TARGET=aarch64-linux-gnu' — that is the bare .so path, not this release." 3
+        md_warn "aarch64 was named explicitly; there is no published bundle for it, so this will almost certainly 404"
+        ;;
+    *) md_fail "unknown target slug '$SLUG' (this demonstration publishes x86_64 only)" 5 ;;
 esac
 
 TARBALL="$(md_tarball_name "$VERSION" "$SLUG")"

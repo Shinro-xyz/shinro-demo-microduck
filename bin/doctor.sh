@@ -32,19 +32,22 @@ echo "  glibc            ${MD_GLIBC:-unknown}"
 echo "  release target   ${MD_SLUG:-none published for this architecture}"
 echo "  classification   $CLASS"
 echo
-echo "The published targets: x86_64 and aarch64, both at a glibc floor of 2.34."
+echo "This demonstration is a desktop simulation: x86_64 only, at a glibc floor of 2.34."
 echo
 case "$CLASS" in
     x86_64)
         echo "The full demo runs here, including the offscreen render." ;;
     aarch64)
-        echo "The full demo runs here. The render is slow on a Pi; the smoke test"
-        echo "does not need it, and the kernel is the fast part (750 us/tick on a Pi 3 B+)." ;;
+        echo "A 64-bit Pi, or another aarch64 board. The Cake release is NOT published"
+        echo "for it - this demonstration is a desktop simulation. The bare compiled"
+        echo "kernel does cross-compile and runs well here (750 us/tick on a Pi 3 B+):"
+        echo "  make compile TARGET=aarch64-linux-gnu" ;;
     *-untested-glibc)
         echo "This is a published architecture, but glibc ${MD_GLIBC:-unknown} is below the"
         echo "2.34 floor the release is built for. The binaries may not start." ;;
     unpublished-architecture)
-        echo "No release is published for $MD_ARCH. The demo compiles for x86_64 and aarch64." ;;
+        echo "No release is published for $MD_ARCH. The Cake release is x86_64 only; the"
+        echo "compiled kernel also cross-compiles to aarch64." ;;
     *)
         echo "This machine is not one the release describes. See docs/targets.md." ;;
 esac
@@ -70,5 +73,5 @@ echo
 echo "Next: bin/verify.sh, then tests/smoke.sh."
 
 [ "$BAD" -eq 0 ] || exit 4
-[ "$CLASS" = "x86_64" ] || [ "$CLASS" = "aarch64" ] || exit 3
+[ "$CLASS" = "x86_64" ] || exit 3
 exit 0
