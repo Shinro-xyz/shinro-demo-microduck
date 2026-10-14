@@ -1,17 +1,17 @@
 # shellcheck shell=bash
 # Copyright 2026 Shinro SAS. Licensed under the Business Source License 1.1; see LICENSE.
 #
-# Shared helpers for the microduck-cake-demo scripts. Sourced by every script
-# under bin/, in a checkout and in an extracted release archive alike; never
-# run on its own.
+# Shared helpers for the shinro-demo-microduck Cake demo scripts. Sourced by
+# every script under bin/, in a checkout and in an extracted release archive
+# alike; never run on its own.
 #
 # The demo consumes a **precompiled Cake release**: the resident (the control
 # plane) and the policy and trajectory capsules are built by the private Cake
 # tree and shipped as signed tarballs, one per target. Nothing here compiles a
 # Cake module, and no Cake source (or ABI header) lives in this repository.
 
-# The public repository this demo is fetched from. Override to test a fork.
-MD_REPO="${MD_REPO:-shinro-dev/microduck-cake-demo}"
+# The repository this demo fetches its release from. Override to test a fork.
+MD_REPO="${MD_REPO:-Shinro-xyz/shinro-demo-microduck}"
 
 # The release signing key fingerprint. EMPTY MEANS UNVERIFIED, and that is a
 # release blocker rather than a default: bin/verify.sh exits non-zero on it and
@@ -63,7 +63,7 @@ md_target_slug() {
 
 md_tarball_name() {
     # md_tarball_name VERSION SLUG
-    printf 'microduck-cake-demo-%s-%s.tar.gz' "$1" "$2"
+    printf 'microduck-cake-%s-%s.tar.gz' "$1" "$2"
 }
 
 # --- machine facts, for bin/doctor.sh ----------------------------------------
