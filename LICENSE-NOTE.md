@@ -66,6 +66,27 @@ Before the first release, confirm:
   Until that is settled, a user following the demo's install step is installing a
   package nobody has been granted rights to use.
 
+## GitHub will show "Other / NOASSERTION" — that is expected, do not "fix" it
+
+GitHub's licence detector reports `NOASSERTION` for this repository. It reports
+exactly the same for the sibling `shinro-dev/kiwi-cake-demo`, whose BSL is
+correct and whose releases are published. The detector matches against the
+canonical BSL text, and a valid BSL file is not that text: it is the canonical
+text **with a Parameters block attached**, which the licence's own Covenants
+require and expressly permit.
+
+So the badge is a limitation of the detector, not a signal about this repository.
+Do not respond to it by replacing `LICENSE` with an unparameterized copy — that
+would remove the Licensor, the Licensed Work, the Additional Use Grant and the
+Change Date, and an unparameterized BSL is not a grant anyone can rely on.
+
+The cost of this is real and worth stating: **the same badge appears on
+`shinro-python-modules`, where it means something entirely different** — that
+repository's `LICENSE` is zero bytes, so `NOASSERTION` there is literally "all
+rights reserved by default". Across the org, one badge covers two opposite
+situations. Prose is what disambiguates them, which is why `NOTICE` opens by
+naming the three licences explicitly.
+
 ## Why Apache License 2.0 satisfies the Change License covenant
 
 The covenant (`LICENSE`, "Covenants of Licensor," item 1) requires a license
