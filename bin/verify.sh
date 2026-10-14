@@ -90,17 +90,31 @@ fi
 echo
 
 echo "3. dependency floor — the target profile allows libc.so.6 alone"
+# The floor is a property of what RUNS ON THE TARGET. cake-resident and
+# admin-probe are the deployed set and must meet it. cake-pack is a host-side
+# packager: it stages the Plan on the machine running the demo and is never
+# shipped to the target, so its link set is reported rather than enforced.
+DEPLOYED=" cake-resident admin-probe "
 DEP=0
 for b in "$DIR"/bin/*; do
     [ -f "$b" ] || continue
+    n="$(basename "$b")"
     NEEDED="$(readelf -d "$b" 2>/dev/null | sed -nE 's/.*NEEDED.*\[(.*)\]/\1/p' |
         grep -vE '^libc\.so\.6$|^ld-linux' | tr '\n' ' ')"
-    if [ -n "$NEEDED" ]; then
-        echo "   $(basename "$b"): extra dependency: $NEEDED"
-        DEP=$((DEP + 1))
-    fi
+    [ -n "$NEEDED" ] || continue
+    case "$DEPLOYED" in
+        *" $n "*)
+            echo "   $n: extra dependency: $NEEDED"
+            echo "     ^ DEPLOYED to the target — this must not happen"
+            DEP=$((DEP + 1))
+            ;;
+        *)
+            echo "   $n: extra dependency: $NEEDED"
+            echo "     (host-side, not deployed to the target — reported, not enforced)"
+            ;;
+    esac
 done
-[ "$DEP" -eq 0 ] && echo "   ok — libc.so.6 alone"
+[ "$DEP" -eq 0 ] && echo "   ok — every deployed binary links libc.so.6 alone"
 FAILS=$((FAILS + DEP))
 echo
 
