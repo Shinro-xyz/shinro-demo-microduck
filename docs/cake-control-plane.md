@@ -97,7 +97,9 @@ epoch guard (`recv obs → Vm.step → send action` stays one lockstep thread).
 ## See it: the render and the swap figure
 
 `make cake` (default `SWAP=circle,eight,slalom SECS=24`) renders two artifacts into
-`docs/media/cake/` (`GIF=cake|full|compact|trajectory`, or `GIF=` to skip):
+`state/media/` (`GIF=cake|full|compact|trajectory`, or `GIF=` to skip); the copies the
+README embeds live under `docs/media/cake/` and are regenerated deliberately (see
+"Running it again" in the README):
 
 - `microduck_cake_walk.gif` — the 3-D MuJoCo walk (offscreen EGL) beside a
   bird's-eye panel that **colours the path by the trajectory module driving it**

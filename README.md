@@ -170,8 +170,9 @@ What a run does:
    renders and PASSes.
 
 `make cake` writes two artifacts to `state/media/` (override with `MEDIA_DIR=`; the
-copies this README embeds live under `docs/media/cake/` and are regenerated deliberately
-with `make cake MEDIA_DIR=docs/media/cake`):
+copies this README embeds live under `docs/media/cake/` and are regenerated
+deliberately — `make cake MEDIA_DIR=docs/media/cake`, plus its anchored pair with
+`make cake ANCHOR=1 MEDIA_DIR=docs/media/cake`):
 
 - `microduck_cake_walk.gif` — the 3-D walk beside a bird's-eye panel that **colours
   the path by the trajectory module driving it**, marks each swap, and shows the
@@ -420,8 +421,9 @@ identity around it), `resident.out` and `client.out`. The GIF and the swap figur
 your clone. The copies this README embeds are regenerated as a deliberate opt-in:
 
 ```bash
-make cake MEDIA_DIR=docs/media/cake   # rewrite the committed media
-make cake MEDIA_DIR=/tmp/duck         # or send it anywhere else
+make cake MEDIA_DIR=docs/media/cake             # rewrite the committed media
+make cake ANCHOR=1 MEDIA_DIR=docs/media/cake    # ...and its anchored pair
+make cake MEDIA_DIR=/tmp/duck                   # or send it anywhere else
 ```
 
 If the dependencies live in a virtualenv, point the runner at it — an explicit `PYTHON`

@@ -60,8 +60,10 @@ unset in `bin/lib/common.sh`, so `bin/fetch-release.sh` verifies the digest and
 check, and the download channel as the trust.
 
 **No `MANIFEST.txt`.** This release does not carry a per-file manifest, so it does not
-record the private `source_revision` the binaries were built from. That is worth adding
-for the next one.
+record the private `source_revision` the binaries were built from. The resident does
+embed its build identity — the private `shinro-cake` source digest `0fc245bd…` (the
+epoch-guard binding-port backfill) — but a per-file `MANIFEST.txt` would record it
+readably; that is worth adding for the next one.
 
 ## Attribution
 
