@@ -368,10 +368,37 @@ README comes from `make cake`.
 
 ## Provenance
 
-`BEST_alpha_walking.onnx` is the export of the **deployed** Microduck walking policy:
-Weights & Biases run `441tzs6d` @ `model_3750`, published at
-[`xiaofengzi/microduck-walking-onnx`](https://huggingface.co/xiaofengzi/microduck-walking-onnx).
-It is a 61→512→256→128→14 MLP (197,896 parameters including the baked observation
-normalizer). The MJCF, meshes and BAM settings are vendored verbatim from the training
-repo (`mjlab-microduck`), so the replay runs the same asset the policy was trained on.
-Details in [provenance.md](docs/provenance.md).
+`BEST_alpha_walking.onnx` is the export of the **deployed** Microduck walking policy.
+The policy is **Pollen Robotics'** work, not Shinro's: it was trained in
+[`pollen-robotics/microduck_rl`](https://github.com/pollen-robotics/microduck_rl)
+(MuJoCo Warp via `mjlab`, PPO via `rsl_rl`, exported to ONNX at 50 Hz) and is published
+by them at
+[`pollen-robotics/microduck-policies`](https://huggingface.co/pollen-robotics/microduck-policies)
+under Apache License 2.0. It is a 61→512→256→128→14 MLP (197,896 parameters including
+the baked observation normalizer). The MJCF, meshes and BAM settings are vendored
+verbatim from that training repo, so the replay runs the same asset the policy was
+trained on. Details in [provenance.md](docs/provenance.md).
+
+> **A correction worth keeping visible.** Earlier revisions of this README cited a
+> Hugging Face *re-upload* of the policy, whose model card declares no licence of its
+> own, and a Weights & Biases run id that the shipped artifact does not carry — the
+> ONNX's own metadata records `run_path = None`. A re-upload grants no rights, and a
+> run id the artifact does not attest is not evidence. Pollen's canonical repository
+> is cited instead.
+
+## Licence
+
+**Business Source License 1.1** — see [LICENSE](LICENSE) and the
+[maintainer note](LICENSE-NOTE.md). It is **not** an open-source licence: personal,
+educational and non-commercial use is granted, and commercial use requires a separate
+licence from Shinro SAS. It converts to **Apache License 2.0 on 2030-10-14.**
+
+Three different licences meet in this repository, and [NOTICE](NOTICE) separates them:
+
+| what | licence |
+| --- | --- |
+| the demo code, **and the compiled Cake binaries published in this repository's releases** | **BSL 1.1** — this repository is the release channel, so its `LICENSE` is the grant those binaries are offered under |
+| the **Cake kernel's source** | closed and commercially copyrighted; **not distributed here at all**, so not licensed here |
+| the **Microduck robot assets** — MJCF, meshes and walking policy | **Pollen Robotics**, Apache License 2.0; excluded from the Licensed Work, and not restricted by it |
+
+Read [fidelity.md](docs/fidelity.md) before drawing conclusions from a run.

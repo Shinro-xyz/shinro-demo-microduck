@@ -6,35 +6,45 @@ Three different licences meet in this repository. Read the section that applies
 to what you are using.
 
 
-1. This repository's own code
------------------------------
+1. This repository's own code, and its releases
+-----------------------------------------------
 
 The demo code — the MuJoCo scene, the observation contract, the BAM actuator
 mirror, the deployment host, the trackers, the scripts under `bin/`, the tests
-and the documentation — is licensed under the **Apache License, Version 2.0**.
-The full text is in `LICENSE`.
+and the documentation — is licensed under the **Business Source License 1.1**.
+The full text and its parameters are in `LICENSE`; the reasoning is in
+`LICENSE-NOTE.md`.
+
+The same licence covers the **compiled Cake binaries and capsules distributed
+from this repository's releases**. That is deliberate, and it is why this is not
+Apache-2.0: this repository is the distribution channel for those binaries, so
+its `LICENSE` is the grant under which they are offered. Personal, educational
+and non-commercial use is granted; commercial use requires a separate licence.
+The licence converts to Apache License 2.0 on the Change Date in `LICENSE`.
 
 
-2. The Cake kernel and the precompiled release bundles — NOT Apache-2.0
------------------------------------------------------------------------
+2. The Cake kernel's source — not distributed here, so not licensed here
+------------------------------------------------------------------------
 
 The scripts under `bin/` fetch and run a **precompiled Cake release**: the
 resident (the control plane), `admin-probe`, `cake-pack`, and the policy and
 trajectory capsules. Those binaries are built from Shinro SAS's **private**
-sources. The kernel is **commercially copyrighted and closed source**, and the
-binaries are **distributed as-is**, without source and without warranty of any
-kind, express or implied. The public position is stated at
-https://shinro.dev/licensing.
+sources. The kernel is **commercially copyrighted and closed source**.
 
-**The Apache License, Version 2.0 grant in `LICENSE` does not extend to those
-binaries.** No Cake source, ABI header or descriptor is distributed from this
-repository; `bin/` contains a fetch-and-run shim only.
+The binaries themselves are part of the Licensed Work above and are covered by
+the Business Source License: you may use them for personal, educational and
+non-commercial purposes, and commercial use requires a separate licence. What is
+**not** granted anywhere, and cannot be, is the kernel's **source**: no Cake
+source, ABI header or descriptor is distributed from this repository. There is
+nothing to license because there is nothing to read; `bin/` contains a
+fetch-and-run shim only, and the released binaries are distributed as-is,
+without source and without warranty of any kind, express or implied.
 
-The scripts under `bin/` carry a Business Source License 1.1 header, because
-they are the fetcher and runner for that closed kernel rather than part of this
-repository's Apache-2.0 code. That header and this section should agree; if they
-ever disagree, this section and https://shinro.dev/licensing are the position,
-and the header is the bug.
+The public position is stated at https://shinro.dev/licensing.
+
+The scripts under `bin/` carry a Business Source License 1.1 header, matching
+this repository's `LICENSE`. If a header and this file ever disagree, this file
+and https://shinro.dev/licensing are the position, and the header is the bug.
 
 A reader who wants the polished, fully-noticed demo — with a `LICENSE`,
 `LICENSE-NOTE.md`, `LIMITATIONS.md`, `SAFETY.md`, `SECURITY.md` and signed,
