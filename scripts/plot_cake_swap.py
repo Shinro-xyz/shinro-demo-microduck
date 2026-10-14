@@ -54,54 +54,61 @@ COLORS = {
 }
 
 
-def _load(run_dir: Path) -> tuple[dict, list[tuple[float, float, float]]]:
-    """The swaps record and the trunk path (``t, x, y``)."""
+def _load(run_dir: Path) -> tuple[dict, list[tuple[float, float, float, float]]]:
+    """The swaps record and the trunk path with its cross-track error."""
     swaps_path = run_dir / "swaps.json"
     trace_path = run_dir / "trace.csv"
     try:
         record = json.loads(swaps_path.read_text())
     except (OSError, json.JSONDecodeError) as exc:
         raise SystemExit(f"cannot read {swaps_path}: {exc}") from exc
-    rows: list[tuple[float, float, float]] = []
+    rows: list[tuple[float, float, float, float]] = []
     try:
         with open(trace_path) as fh:
             next(fh)  # header
             for line in fh:
-                t, x, y, _z = (float(v) for v in line.split(","))
-                rows.append((t, x, y))
+                parts = [float(v) for v in line.split(",")]
+                # Older runs wrote only ``t,x,y,z``; the cross-track column is optional.
+                cte = parts[4] if len(parts) > 4 else float("nan")
+                rows.append((parts[0], parts[1], parts[2], cte))
     except (OSError, ValueError) as exc:
         raise SystemExit(f"cannot read {trace_path}: {exc}") from exc
     return record, rows
 
 
-def plot(record: dict, rows: list[tuple[float, float, float]], out: Path) -> Path:
+def plot(record: dict, rows: list[tuple[float, float, float, float]], out: Path) -> Path:
     schedule: list[list] = record["schedule"]
     swaps: list[dict] = record["swaps"]
     duration = float(record["duration_s"])
 
-    fig = plt.figure(figsize=(12.4, 5.2), dpi=110)
+    fig = plt.figure(figsize=(12.4, 6.0), dpi=110)
     gs = fig.add_gridspec(1, 2, width_ratios=[1.0, 1.35], wspace=0.24)
+    left = gs[0, 0].subgridspec(2, 1, height_ratios=[3.0, 1.15], hspace=0.32)
 
-    # --- left: the path, coloured by the module driving it ------------------
-    ax = fig.add_subplot(gs[0, 0])
+    # --- left-top: the path, coloured by the module driving it --------------
+    ax = fig.add_subplot(left[0, 0])
     times = np.array([r[0] for r in rows])
-    xy = np.array([r[1:] for r in rows])
+    xy = np.array([r[1:3] for r in rows])
+    cte = np.array([r[3] for r in rows])
     starts = [float(s[1]) for s in schedule]
     bounds = starts + [duration + 1.0]
     for i, (name, _start) in enumerate(schedule):
         mask = (times >= bounds[i]) & (times < bounds[i + 1])
         if mask.any():
             ax.plot(xy[mask, 0], xy[mask, 1], "-", lw=2.4, color=COLORS.get(name, "tab:cyan"), label=name)
+    swap_offsets = ((12, 10), (-12, -22))
     for i, swap in enumerate(swaps, start=1):
         at = float(swap["at_s"])
         j = int(np.searchsorted(times, at))
         if 0 <= j < len(xy):
             ax.plot([xy[j, 0]], [xy[j, 1]], "D", color="black", ms=7, zorder=6)
+            dx, dy = swap_offsets[(i - 1) % len(swap_offsets)]
             ax.annotate(
                 f"swap {i}\n-> {swap['to']}",
                 (xy[j, 0], xy[j, 1]),
                 textcoords="offset points",
-                xytext=(10, 8),
+                xytext=(dx, dy),
+                ha="left" if dx > 0 else "right",
                 fontsize=8,
             )
     ax.plot([xy[0, 0]], [xy[0, 1]], "ks", ms=7, label="start")
@@ -111,6 +118,22 @@ def plot(record: dict, rows: list[tuple[float, float, float]], out: Path) -> Pat
     ax.set_ylabel("y [m]")
     ax.grid(True, alpha=0.3)
     ax.legend(loc="best", fontsize=8, framealpha=0.9)
+
+    # --- left-bottom: the tracking error that path incurred -----------------
+    axe = fig.add_subplot(left[1, 0])
+    for i, (name, _start) in enumerate(schedule):
+        mask = (times >= bounds[i]) & (times < bounds[i + 1])
+        if mask.any():
+            axe.plot(times[mask], cte[mask], "-", lw=1.8, color=COLORS.get(name, "tab:cyan"))
+        if i > 0:
+            axe.axvline(starts[i], color="black", lw=1.2, ls="--", alpha=0.7)
+    axe.set_xlim(0.0, duration)
+    finite_hi = float(np.nanmax(cte)) if np.any(np.isfinite(cte)) else 0.0
+    axe.set_ylim(0.0, max(0.05, finite_hi * 1.25))
+    axe.set_xlabel("t [s]")
+    axe.set_ylabel("cross-track [m]")
+    axe.set_title("tracking error, by module (dashed = replace-slot)", fontsize=10)
+    axe.grid(True, alpha=0.3)
 
     # --- right: how Cake ran each swap --------------------------------------
     ax = fig.add_subplot(gs[0, 1])

@@ -42,6 +42,16 @@ done
 [ -n "$SWAP" ] || SWAP="$TRAJECTORY"
 IFS=',' read -r -a TRAJS <<<"$SWAP"
 
+# The anchored trajectory capsules (`ANCHOR=1`) re-parent each path onto the duck
+# at the swap, so the hand-over shows no cross-track step; the default capsules
+# stay world-fixed at the origin.
+TRAJ_SUFFIX=""
+MEDIA_SUFFIX=""
+if [ -n "${ANCHOR-}" ]; then
+    TRAJ_SUFFIX="_anchor"
+    MEDIA_SUFFIX="_anchored"
+fi
+
 # The trajectory schedule for the render panel: one module per equal segment.
 n_traj=${#TRAJS[@]}
 segment="$(awk -v s="$SECONDS_TO_RUN" -v n="$n_traj" 'BEGIN { printf "%.2f", s / n }')"
@@ -94,7 +104,7 @@ deploy_args=(deploy --state-root "$STORE" --plan-out "$PLAN")
 [ -n "$HOST_FLAG" ] && deploy_args+=("$HOST_FLAG")
 deploy_args+=(
     --slot "microduck:$BUNDLE/caps/microduck.cakecap:$POLICY_CFG"
-    --slot "trajectory:$BUNDLE/caps/trajectory_${TRAJS[0]}.cakecap:$TRAJ_CFG"
+    --slot "trajectory:$BUNDLE/caps/trajectory_${TRAJS[0]}${TRAJ_SUFFIX}.cakecap:$TRAJ_CFG"
 )
 # Stage every replacement capsule as an extra slot, so the resident admits it
 # at start (there is no runtime AdmitCapsule, and a candidate naming a capsule
@@ -102,7 +112,7 @@ deploy_args+=(
 # provider the policy actually binds, since several slots provide `command`.
 for t in "${TRAJS[@]}"; do
     [ "$t" = "${TRAJS[0]}" ] && continue
-    deploy_args+=(--slot "spare_$t:$BUNDLE/caps/trajectory_$t.cakecap:$TRAJ_CFG")
+    deploy_args+=(--slot "spare_$t:$BUNDLE/caps/trajectory_$t${TRAJ_SUFFIX}.cakecap:$TRAJ_CFG")
 done
 deploy_args+=(--bind "microduck:0=trajectory")
 "$CAKE_PACK" "${deploy_args[@]}" | sed 's/^/microduck-cake: /'
@@ -128,7 +138,11 @@ trap cleanup EXIT
 
 md_say "starting the MuJoCo client on $SOCK"
 gif_args=()
-[ -n "$GIF_PROFILE" ] && gif_args=(--gif "$GIF_PROFILE" --out-dir "$MEDIA_DIR" --schedule "$schedule")
+[ -n "$GIF_PROFILE" ] && gif_args=(--gif "$GIF_PROFILE" --out-dir "$MEDIA_DIR" --schedule "$schedule" --panel-duration "$SECONDS_TO_RUN")
+# The anchored run is the same demo with paths re-parented onto the duck; keep
+# its media beside the world-fixed one under a distinct name.
+[ -n "${ANCHOR-}" ] && gif_args+=(--anchor)
+[ -n "$MEDIA_SUFFIX" ] && gif_args+=(--video-name "microduck_cake_walk${MEDIA_SUFFIX}.gif")
 (cd "$MD_ROOT" && exec "$CLIENT_PY" -m demos.demo_cake_policy \
     --socket "$SOCK" --seconds "$((SECONDS_TO_RUN + 40))" --csv "$CSV" $BAM_FLAG "${gif_args[@]}") \
     >"$CLIENT_LOG" 2>&1 &
@@ -156,7 +170,7 @@ for t in "${TRAJS[@]}"; do
     [ "$i" -eq 1 ] && continue
     sleep "$segment"
     md_say "swapping trajectory -> $t"
-    capsule="$BUNDLE/caps/trajectory_$t.cakecap"
+    capsule="$BUNDLE/caps/trajectory_$t${TRAJ_SUFFIX}.cakecap"
     digest="$(sha256sum "$capsule" | cut -d' ' -f1)"
     "$CLIENT_PY" - "$PAYLOAD" "$traj_uuid" "$digest" <<'PY'
 import sys
@@ -217,7 +231,7 @@ trap - EXIT
 # The swap-handling figure: the path by module, and the transaction Cake ran
 # for each swap (phase by phase). Written next to the GIF.
 if [ -n "$GIF_PROFILE" ] && [ -f "$RUN_DIR/swaps.json" ]; then
-    "$CLIENT_PY" "$MD_ROOT/scripts/plot_cake_swap.py" --run-dir "$RUN_DIR" --out "$MEDIA_DIR/microduck_cake_swap.png" 2>&1 | sed 's/^/microduck-cake: /' || true
+    "$CLIENT_PY" "$MD_ROOT/scripts/plot_cake_swap.py" --run-dir "$RUN_DIR" --out "$MEDIA_DIR/microduck_cake_swap${MEDIA_SUFFIX}.png" 2>&1 | sed 's/^/microduck-cake: /' || true
 fi
 
 echo "=== client ==="
@@ -235,9 +249,11 @@ import json, sys
 for line in open(sys.argv[1]):
     if line.startswith("RESULT "):
         m = json.loads(line[len("RESULT "):])
+        cte = m.get("mean_cross_track_m")
+        cte_note = f" cte={cte:.3f} m" if cte is not None else ""
         print(f"walk: steps={m['steps']} travel={m['travel_m']:.3f} m "
               f"speed={m['mean_speed_mps']:.3f} m/s tilt={m['tilt_deg']:.1f} deg "
-              f"z={m['final_trunk_z']:.3f} m")
+              f"z={m['final_trunk_z']:.3f} m{cte_note}")
         if m["steps"] < 10:
             sys.exit("walk: too few steps for a verdict")
         break

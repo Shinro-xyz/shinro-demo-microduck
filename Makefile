@@ -110,10 +110,13 @@ SECS ?= 24
 # swap-handling figure are written to MEDIA_DIR (committed under docs/media/cake/).
 GIF ?= cake
 MEDIA_DIR ?= docs/media/cake
+# ANCHOR=1 selects the anchored trajectory capsules (each path re-parented onto
+# the duck at its swap) instead of the world-fixed ones.
+ANCHOR ?=
 fetch-cake:
 	cake/fetch-release.sh
 cake:
-	MEDIA_DIR=$(MEDIA_DIR) GIF=$(GIF) cake/run-microduck.sh --seconds $(SECS) --trajectory $(TRAJ) $(if $(SWAP),--swap $(SWAP))
+	MEDIA_DIR=$(MEDIA_DIR) GIF=$(GIF) ANCHOR=$(ANCHOR) cake/run-microduck.sh --seconds $(SECS) --trajectory $(TRAJ) $(if $(SWAP),--swap $(SWAP))
 
 test:
 	$(PYTHON) -m pytest tests/ -v --tb=short

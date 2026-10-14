@@ -51,7 +51,9 @@ make cake CMD=backward
 
 `make cake` stages a one-slot Plan from the fetched capsule, starts the resident
 and this repo's MuJoCo client, lets the walk run, drains the resident, and prints
-the trajectory. The trace lands in `build/cake/run/trace.csv`.
+the trajectory. The trace lands in `build/cake/run/trace.csv` (`t,x,y,z,cross_track`
+— the trunk path plus the per-tick cross-track error against the active module's
+reference).
 
 Both `x86_64` (a MuJoCo desktop) and `aarch64` (a 64-bit Pi) are published;
 `fetch-release.sh` picks the tarball for `uname -m`. Override the location when
@@ -96,15 +98,18 @@ epoch guard (`recv obs → Vm.step → send action` stays one lockstep thread).
 `docs/media/cake/` (`GIF=cake|full|compact|trajectory`, or `GIF=` to skip):
 
 - `microduck_cake_walk.gif` — the 3-D MuJoCo walk (offscreen EGL) beside a
-  bird's-eye panel that **colours the path by the trajectory module driving it**,
-  marks each swap on the path, and carries a timeline strip of the module active
-  over time.
-- `microduck_cake_swap.png` — how Cake ran each swap: the two module bands (the
-  policy running throughout, the trajectory generations advancing), the swap
-  annotations (`replace-slot → …`, `txn COMPLETED`, `session unchanged`), and the
-  update transaction's phases as one flow — closure computed → drain the retiring
-  generation → apply the `live_snapshot` row → publish the binding snapshot →
-  reclaim the retired generation (`docs/event-code-registry.md`).
+  bird's-eye panel that **colours the path by the trajectory module driving it**
+  (each module's reference drawn dashed behind it), plots the **cross-track
+  error** that path incurred, and carries a timeline strip of the module active
+  over time. The bigger `cake` render profile keeps all three rows legible.
+- `microduck_cake_swap.png` — how Cake ran each swap: the trunk path and the
+  **cross-track error** it incurred (both coloured by module, swaps marked) on the
+  left, and on the right the two module bands (the policy running throughout, the
+  trajectory generations advancing), the swap annotations (`replace-slot → …`,
+  `txn COMPLETED`, `session unchanged`), and the update transaction's phases as
+  one flow — closure computed → drain the retiring generation → apply the
+  `live_snapshot` row → publish the binding snapshot → reclaim the retired
+  generation (`docs/event-code-registry.md`).
 
 Both are drawn by the demo's own code (`demos/demo_cake_policy.py` +
 `scripts/plot_cake_swap.py`), from the `trace.csv` and `swaps.json` the run

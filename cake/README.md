@@ -38,7 +38,8 @@ Both targets are published — `x86_64` (a MuJoCo desktop) and `aarch64` (a
 The trajectory is a **swappable Cake module**: `make cake SWAP=circle,eight,slalom`
 switches it live with `replace-slot` while the robot walks, and the resident never
 restarts. `make cake` also renders a GIF of the walk (the path coloured by
-trajectory module, swaps marked) and a figure of how Cake ran each swap. See
+trajectory module with its tracking error, swaps marked) and a figure of how Cake
+ran each swap with the same cross-track error. See
 [Switch trajectories live](../docs/cake-control-plane.md#switch-trajectories-live-without-turning-off-cake).
 
 ## The release, and why it is precompiled

@@ -22,6 +22,12 @@ Cake module on the plane, so it can be swapped live with ``replace-slot`` while
 the robot keeps walking. The 4-D pose is what lets that module run closed-loop
 pure pursuit against its reference path. This client only runs the plant.
 
+For the render, the client also mirrors each trajectory capsule's reference path
+(through :mod:`shinro_demo_microduck.trajectory`, the module the capsule's baked
+shapes were written to match) and measures the trunk's cross-track error each
+tick, so the panel can show how well each module was tracked before and after a
+swap.
+
 Nothing Cake-shaped reaches this side. There is no ``cake_*`` header, no entry
 symbol, no lifecycle callback, and no Cake source in this repository: the wire is
 just two little-endian f64 arrays — the graph's own port layout.
@@ -57,12 +63,16 @@ import socket
 import struct
 import sys
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import numpy as np
 
 from shinro_demo_microduck import contract
 from shinro_demo_microduck.sim import CONTROL_DT, MicroduckSim
 from shinro_demo_microduck.viz import GIF_PROFILES
+
+if TYPE_CHECKING:
+    from shinro_demo_microduck.trajectory import ReferencePath
 
 #: The command block width (`twist(3)` + `head_pose(4)` + `body_pose(6)`); it is
 #: the trajectory module's, not this process's.
@@ -75,6 +85,68 @@ N_SEND = N_PROPRIO + N_POSE
 N_ACTIONS = contract.N_ACTIONS
 SEND_STRUCT = struct.Struct(f"<{N_SEND}d")
 ACT_STRUCT = struct.Struct(f"<{N_ACTIONS}d")
+
+#: Cake trajectory capsule name -> the ``trajectory.py`` shape it was compiled
+#: from (``demo/trajectory.cmdl`` bakes ``trajectory = circle|eight|slalom|
+#: forward``). The client mirrors the reference here so it can measure how far the
+#: trunk strayed from the path the *active* module was steering toward — the
+#: capsule itself lives in the private tree, so the mirror is the only way to see
+#: the reference from this side.
+_CAKE_SHAPES = {
+    "circle": ("circle", True),
+    "eight": ("figure_eight", True),
+    "slalom": ("slalom", False),
+    "forward": ("straight", False),
+}
+
+
+def _reference_for(name: str) -> ReferencePath | None:
+    """The reference path a Cake trajectory capsule was built from, or ``None``.
+
+    Uses :mod:`shinro_demo_microduck.trajectory` (the documented mirror of the
+    capsule's baked shapes — the module's defaults match the capsule's
+    ``circle``/``eight``/``slalom``/``forward`` exactly). Imported lazily so the
+    non-rendering client never pulls the framework in.
+    """
+    spec = _CAKE_SHAPES.get(name)
+    if spec is None:
+        return None
+    from shinro_demo_microduck import trajectory as traj
+
+    attr, closed = spec
+    return traj.ReferencePath(getattr(traj, attr)(), closed=closed)
+
+
+def _wrap_pi(a: float) -> float:
+    return math.atan2(math.sin(a), math.cos(a))
+
+
+def _path_start_tangent(reference: ReferencePath) -> float:
+    """The heading a reference path leaves its start with — what an anchored
+    capsule rotates onto the robot's heading (circle +x, eight 45 deg, slalom
+    ~54 deg)."""
+    pts = reference.points
+    return math.atan2(float(pts[1][1] - pts[0][1]), float(pts[1][0] - pts[0][0]))
+
+
+def _anchor_points(reference: ReferencePath, anchor: tuple[float, float, float], theta: float) -> np.ndarray:
+    """The reference path re-parented onto ``anchor`` with its start tangent
+    rotated by ``theta`` — the world path an anchored capsule steers toward."""
+    pts = np.asarray(reference.points, dtype=np.float64)[:, :2]
+    cth, sth = math.cos(theta), math.sin(theta)
+    world = np.empty_like(pts)
+    world[:, 0] = cth * pts[:, 0] - sth * pts[:, 1] + anchor[0]
+    world[:, 1] = sth * pts[:, 0] + cth * pts[:, 1] + anchor[1]
+    return world
+
+
+def _segment_at(segments: list[tuple[str, float]], t: float) -> int:
+    """Index of the trajectory active at ``t`` seconds (mirrors ``SwapPanels``)."""
+    idx = 0
+    for i, (_name, start) in enumerate(segments):
+        if t >= start:
+            idx = i
+    return idx
 
 
 def _yaw(quat_wxyz: np.ndarray) -> float:
@@ -115,6 +187,9 @@ def run(
     render=None,
     out_dir: Path | None = None,
     segments: list[tuple[str, float]] | None = None,
+    panel_seconds: float | None = None,
+    anchor: bool = False,
+    video_name: str = "microduck_cake_walk.gif",
 ) -> dict:
     # The sim's own `command` field is unused: the trajectory comes from the
     # Cake plane. A zero command keeps the sim's reset state canonical.
@@ -135,16 +210,33 @@ def run(
     n_steps = max(1, int(round(seconds / CONTROL_DT)))
     start_xy = sim.trunk_position[:2].copy()
     rows: list[tuple[float, float, float, float]] = []
+    ctes: list[float] = []
     last_action = np.zeros(N_ACTIONS)
 
+    # The reference path each scheduled module tracks, so the client can measure
+    # cross-track error without reaching into the private capsule.
+    refs = [_reference_for(name) for name, _ in segments] if segments else None
+    # Anchored metric state: the capture is per segment (see the loop).
+    anchor_seg = -1
+    anchor_pose = (0.0, 0.0, 0.0)
+    anchor_theta = 0.0
+
     # Optional video: the 3-D walk plus a bird's-eye panel that colours the path
-    # by the trajectory module driving it and marks each live swap.
+    # by the trajectory module driving it, plots the tracking error, and marks
+    # each live swap.
     panels = None
     grabber = None
     if render is not None:
         from shinro_demo_microduck.viz import FrameGrabber, SwapPanels
 
-        panels = SwapPanels(segments or [("trajectory", 0.0)], seconds)
+        seg_list = segments or [("trajectory", 0.0)]
+        seg_refs: list[np.ndarray | None] = (
+            [None if ref is None else ref.points for ref in refs] if refs is not None else [None] * len(seg_list)
+        )
+        # The client is launched with a +40 s safety margin on the loop, so the
+        # panel's time axis must follow the *intended* run, not the loop bound —
+        # otherwise the walk only fills a third of the window.
+        panels = SwapPanels(seg_list, panel_seconds if panel_seconds is not None else seconds, references=seg_refs)
         grabber = FrameGrabber(sim, render, panels)
         if not grabber.enabled:
             grabber = None
@@ -169,10 +261,36 @@ def run(
                 break
             last_action = action
             pos = sim.trunk_position
-            rows.append((step * CONTROL_DT, float(pos[0]), float(pos[1]), float(pos[2])))
+            now = step * CONTROL_DT
+            # Cross-track error against the active module's reference: 0 means the
+            # trunk rode the path; the jump across a swap is the transition the
+            # robot has to make onto the new trajectory.
+            seg = _segment_at(segments, now) if segments else 0
+            cross_track = math.nan
+            if refs is not None:
+                reference = refs[seg]
+                if reference is not None:
+                    if anchor:
+                        # An anchored capsule re-parents its path onto the pose it
+                        # first reads, so mirror that: capture the anchor at the
+                        # segment's first tick and measure the transformed pose.
+                        if seg != anchor_seg:
+                            anchor_seg = seg
+                            anchor_pose = (float(pos[0]), float(pos[1]), _yaw(sim.trunk_quaternion))
+                            anchor_theta = _wrap_pi(anchor_pose[2] - _path_start_tangent(reference))
+                            if panels is not None:
+                                panels.set_reference(seg, _anchor_points(reference, anchor_pose, anchor_theta))
+                        dx = float(pos[0]) - anchor_pose[0]
+                        dy = float(pos[1]) - anchor_pose[1]
+                        cth, sth = math.cos(anchor_theta), math.sin(anchor_theta)
+                        local = np.array([cth * dx + sth * dy, -sth * dx + cth * dy])
+                        cross_track = float(reference.cross_track(local))
+                    else:
+                        cross_track = float(reference.cross_track(pos))
+            rows.append((now, float(pos[0]), float(pos[1]), float(pos[2])))
+            ctes.append(cross_track)
             if grabber is not None and grabber.due(step):
-                now = step * CONTROL_DT
-                panels.update(now, pos, panels.segment_at(now))
+                panels.update(now, pos, seg, cross_track)
                 grabber.capture(sim)
     finally:
         conn.close()
@@ -181,11 +299,12 @@ def run(
 
     video = None
     if grabber is not None:
-        video = grabber.save((out_dir or Path("build/cake/run")) / "microduck_cake_walk.gif")
+        video = grabber.save((out_dir or Path("build/cake/run")) / video_name)
         grabber.close()
         if video is not None:
             print(f"sim: wrote {video} ({video.stat().st_size / 1e6:.2f} MB)")
 
+    finite_cte = [c for c in ctes if math.isfinite(c)]
     pos = sim.trunk_position
     travel = float(np.linalg.norm(pos[:2] - start_xy))
     metrics = {
@@ -195,6 +314,7 @@ def run(
         "final_trunk_z": float(pos[2]),
         "tilt_deg": float(np.degrees(sim.trunk_tilt)),
         "mean_abs_action": float(np.mean(np.abs(last_action))),
+        "mean_cross_track_m": float(np.mean(finite_cte)) if finite_cte else None,
         "nan_obs": bool(not np.all(np.isfinite(sim.observation()))),
         "video": str(video) if video is not None else None,
     }
@@ -203,9 +323,9 @@ def run(
         try:
             csv_path.parent.mkdir(parents=True, exist_ok=True)
             with open(csv_path, "w") as fh:
-                fh.write("t,x,y,z\n")
-                for t, x, y, z in rows:
-                    fh.write(f"{t:.4f},{x:.6f},{y:.6f},{z:.6f}\n")
+                fh.write("t,x,y,z,cross_track\n")
+                for (t, x, y, z), cte in zip(rows, ctes):
+                    fh.write(f"{t:.4f},{x:.6f},{y:.6f},{z:.6f},{cte:.6f}\n")
         except OSError as exc:
             print(f"sim: could not write {csv_path}: {exc}", file=sys.stderr)
         else:
@@ -234,6 +354,22 @@ def main(argv: list[str] | None = None) -> int:
         default=None,
         help="trajectory segments for the panel, e.g. circle@0,eight@3,slalom@6",
     )
+    parser.add_argument(
+        "--panel-duration",
+        type=float,
+        default=None,
+        help="intended run length for the panel time axis (defaults to --seconds)",
+    )
+    parser.add_argument(
+        "--anchor",
+        action="store_true",
+        help="the trajectory capsules re-parent their paths onto the duck; mirror that in the error metric",
+    )
+    parser.add_argument(
+        "--video-name",
+        default="microduck_cake_walk.gif",
+        help="GIF file name under --out-dir",
+    )
     args = parser.parse_args(argv)
 
     segments = None
@@ -248,6 +384,9 @@ def main(argv: list[str] | None = None) -> int:
         render=GIF_PROFILES[args.gif] if args.gif else None,
         out_dir=Path(args.out_dir) if args.out_dir else None,
         segments=segments,
+        panel_seconds=args.panel_duration,
+        anchor=args.anchor,
+        video_name=args.video_name,
     )
     if metrics["steps"] < 10:
         print("sim: too few steps for a verdict", file=sys.stderr)

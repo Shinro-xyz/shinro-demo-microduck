@@ -23,6 +23,8 @@ achieved one — the honest picture of what the policy tracked and what it did n
 
 from __future__ import annotations
 
+import shutil
+import subprocess
 from dataclasses import dataclass
 
 import matplotlib
@@ -329,6 +331,13 @@ class Render:
     composite_width: int = 1024
     every: int = 4  # capture every N control ticks (12.5 fps at 50 Hz)
     colors: int = 128
+    #: Percentage of a lossy colour merge applied to the written GIF when
+    #: ImageMagick is installed (0 disables it). The follow-camera makes every
+    #: frame's 3-D scene new, so a capture cannot lean on inter-frame
+    #: compression; merging near colours is the lever left, and a low value
+    #: roughly halves the file while the panels stay legible. Ignored when no
+    #: converter is installed, and a re-encode that is not smaller is discarded.
+    fuzz: int = 0
 
     @property
     def fps(self) -> float:
@@ -348,11 +357,46 @@ COMPACT = Render(frame_wh=(320, 320), composite_width=720, every=5, colors=96)
 TRAJECTORY_GIF = Render(frame_wh=(256, 256), composite_width=576, every=6, colors=64)
 
 #: Profile for the Cake swap showcase: long enough (~24 s) for several trajectory
-#: segments and their swaps, trimmed so it still commits.
-CAKE = Render(frame_wh=(288, 288), composite_width=704, every=6, colors=64)
+#: segments and their swaps. The frame is deliberately larger than the other
+#: profiles so the three-row tracking panel (path, cross-track error, timeline)
+#: stays legible. The stride is 12, not 6: the composite panel redraw is heavy
+#: enough that a stride-6 render cannot hold real time, and the runner times its
+#: swaps by wall-clock, so a lagging render drifts from the sim-time trace.
+#: `fuzz` re-encodes the written GIF with a lossy colour merge, roughly halving
+#: it; the capture cannot lean on inter-frame compression because the
+#: follow-camera makes every frame's 3-D scene new.
+CAKE = Render(frame_wh=(360, 360), composite_width=1080, every=12, colors=64, fuzz=5)
 
 #: Render profiles selectable with ``--gif``.
 GIF_PROFILES = {"full": Render(), "compact": COMPACT, "trajectory": TRAJECTORY_GIF, "cake": CAKE}
+
+
+def _optimize_gif(path, fuzz: int) -> None:
+    """Re-encode a written GIF with a lossy colour merge, in place, if it helps.
+
+    Guarded on both sides: a missing converter leaves the GIF exactly as the
+    render wrote it, and a re-encode that does not come out smaller is dropped.
+    The frames, size and delay are preserved (only the palette is re-merged).
+    """
+    if fuzz <= 0:
+        return
+    exe = shutil.which("magick") or shutil.which("convert")
+    if exe is None:
+        return
+    tmp = path.with_name(path.stem + ".opt.gif")
+    try:
+        subprocess.run(
+            [exe, str(path), "-fuzz", f"{fuzz}%", "-layers", "OptimizeTransparency", str(tmp)],
+            check=True,
+            capture_output=True,
+        )
+    except (OSError, subprocess.CalledProcessError):
+        tmp.unlink(missing_ok=True)
+        return
+    if tmp.exists() and tmp.stat().st_size < path.stat().st_size:
+        tmp.replace(path)
+    else:
+        tmp.unlink(missing_ok=True)
 
 
 def _fit_width(rgb: np.ndarray, render: Render) -> np.ndarray:
@@ -436,6 +480,7 @@ class FrameGrabber:
 
         path.parent.mkdir(parents=True, exist_ok=True)
         iio.imwrite(path, self.frames, duration=1000.0 / self.render.fps, loop=0)
+        _optimize_gif(path, self.render.fuzz)
         return path
 
     def close(self) -> None:
@@ -450,30 +495,57 @@ _SEGMENT_COLORS = ("tab:orange", "tab:blue", "tab:green", "tab:purple", "tab:red
 
 
 class SwapPanels:
-    """Bird's-eye path coloured by the active trajectory, with swap markers.
+    """Reference-vs-actual path, tracking error, and the active trajectory module.
 
     The Cake plane's panel. It shows the path the walk actually traced and, by
     colour, which trajectory module drove each stretch — the visual answer to
-    "the resident kept running while the trajectory changed". Each swap is marked
-    on the path and, with a dashed line, on the timeline strip that names the
-    module active over time.
+    "the resident kept running while the trajectory changed". A middle row plots
+    the cross-track error the active module incurred (zero means the trunk rode
+    its reference), and the bottom strip names the module active over time. Each
+    swap is marked on the path and, with a dashed line, on both lower rows.
 
     Args:
         segments: ``[(name, start_seconds), ...]`` in order; the first starts at 0.
-        duration: Run length in seconds (x-limit of the timeline strip).
+        duration: Run length in seconds (x-limits of the time panels).
+        references: Optional per-segment reference paths, in the same order as
+            ``segments`` (``None`` where a segment's reference is unknown). They
+            are drawn dashed behind the trunk and are what the error row measures
+            against; the caller computes the error, not this panel.
     """
 
-    def __init__(self, segments, duration, *, wh: tuple[float, float] = (5.4, 4.7), dpi: int = 100) -> None:
+    def __init__(
+        self,
+        segments,
+        duration,
+        *,
+        references: list[np.ndarray | None] | None = None,
+        wh: tuple[float, float] = (6.2, 6.6),
+        dpi: int = 100,
+    ) -> None:
         self.names = [name for name, _ in segments]
         self.starts = [float(start) for _, start in segments]
         self.duration = float(duration)
         self._xy: list[list[np.ndarray]] = [[] for _ in self.names]
+        self._t_seg: list[list[float]] = [[] for _ in self.names]
+        self._cte: list[list[float]] = [[] for _ in self.names]
         self._seg: list[int] = []
+        ref_list: list[np.ndarray | None] = list(references) if references is not None else [None] * len(self.names)
 
         self.fig = plt.figure(figsize=wh, dpi=dpi)
-        gs = self.fig.add_gridspec(2, 1, height_ratios=[3, 1], hspace=0.42)
+        gs = self.fig.add_gridspec(3, 1, height_ratios=[3.0, 1.6, 0.7], hspace=0.5)
         self.ax = self.fig.add_subplot(gs[0, 0])
-        self.ax.set_title("bird's-eye trunk path, coloured by trajectory module", fontsize=11)
+        self.ax.set_title("bird's-eye trunk path vs reference, coloured by trajectory module", fontsize=11)
+        # The reference each module steers toward, dashed and without a legend
+        # entry: the trunk line already names the module. Kept so an anchored run
+        # can re-place a segment's reference once its anchor is known.
+        self.ref_lines: list = [None] * len(self.names)
+        for i, ref in enumerate(ref_list):
+            if ref is None:
+                continue
+            ref = np.asarray(ref, dtype=np.float64)[:, :2]
+            self.ref_lines[i] = self.ax.plot(
+                ref[:, 0], ref[:, 1], "--", color=_SEGMENT_COLORS[i % len(_SEGMENT_COLORS)], lw=1.0, alpha=0.55, zorder=1
+            )[0]
         self.lines = [
             self.ax.plot([], [], "-", color=_SEGMENT_COLORS[i % len(_SEGMENT_COLORS)], lw=2.3, label=name)[0]
             for i, name in enumerate(self.names)
@@ -486,7 +558,23 @@ class SwapPanels:
         self.ax.grid(True, alpha=0.3)
         self.ax.legend(loc="best", fontsize=8, framealpha=0.9)
 
-        self.axt = self.fig.add_subplot(gs[1, 0])
+        self.axerr = self.fig.add_subplot(gs[1, 0])
+        self.axerr.set_title("tracking error (cross-track |Δ|), coloured by trajectory module", fontsize=9)
+        self.lines_err = [
+            self.axerr.plot([], [], "-", color=_SEGMENT_COLORS[i % len(_SEGMENT_COLORS)], lw=1.8)[0] for i in range(len(self.names))
+        ]
+        for i, name in enumerate(self.names):
+            start = self.starts[i]
+            end = self.starts[i + 1] if i + 1 < len(self.names) else self.duration
+            self.axerr.axvspan(start, end, color=_SEGMENT_COLORS[i % len(_SEGMENT_COLORS)], alpha=0.10)
+            if i > 0:
+                self.axerr.axvline(start, color="black", lw=1.2, ls="--")
+        self.axerr.set_xlim(0.0, self.duration)
+        self.axerr.set_ylim(0.0, 0.2)
+        self.axerr.set_ylabel("error [m]")
+        self.axerr.grid(True, alpha=0.3)
+
+        self.axt = self.fig.add_subplot(gs[2, 0])
         for i, name in enumerate(self.names):
             start = self.starts[i]
             end = self.starts[i + 1] if i + 1 < len(self.names) else self.duration
@@ -509,8 +597,36 @@ class SwapPanels:
                 idx = i
         return idx
 
-    def update(self, t: float, xy: np.ndarray, seg: int) -> None:
-        """Record one tick into segment ``seg`` and redraw."""
+    def set_reference(self, seg: int, points: np.ndarray) -> None:
+        """Re-place one segment's dashed reference path.
+
+        An anchored trajectory capsule re-parents its path onto the trunk's pose
+        at the swap, so the line drawn at construction (the world-fixed shape)
+        would be the wrong reference for that stretch and the traced path would
+        look like it drifted from it. Call this as soon as a segment's anchor is
+        known, with the path already transformed into the world.
+        """
+        pts = np.asarray(points, dtype=np.float64)[:, :2]
+        if self.ref_lines[seg] is None:
+            self.ref_lines[seg] = self.ax.plot(
+                pts[:, 0],
+                pts[:, 1],
+                "--",
+                color=_SEGMENT_COLORS[seg % len(_SEGMENT_COLORS)],
+                lw=1.0,
+                alpha=0.55,
+                zorder=1,
+            )[0]
+        else:
+            self.ref_lines[seg].set_data(pts[:, 0], pts[:, 1])
+
+    def update(self, t: float, xy: np.ndarray, seg: int, cross_track: float | None = None) -> None:
+        """Record one tick into segment ``seg`` and redraw.
+
+        ``cross_track`` is the distance from the trunk to the active module's
+        reference path. Pass ``None`` when no reference is known, so the error row
+        stays empty rather than plotting a fake zero.
+        """
         xy = np.asarray(xy, dtype=np.float64)[:2]
         self._seg.append(int(seg))
         self._xy[seg].append(xy)
@@ -522,6 +638,13 @@ class SwapPanels:
         span = 0.22 * max(0.4, float(np.ptp(allpts[:, 0])), float(np.ptp(allpts[:, 1]))) + 0.2
         self.ax.set_xlim(allpts[:, 0].min() - span, allpts[:, 0].max() + span)
         self.ax.set_ylim(allpts[:, 1].min() - span, allpts[:, 1].max() + span)
+
+        if cross_track is not None:
+            self._t_seg[seg].append(float(t))
+            self._cte[seg].append(float(cross_track))
+            self.lines_err[seg].set_data(self._t_seg[seg], self._cte[seg])
+            hi = max((max(v) for v in self._cte if v), default=0.0)
+            self.axerr.set_ylim(0.0, max(0.05, hi * 1.2))
 
         # First tick of a new segment: mark the swap on the path.
         if len(self._seg) >= 2 and self._seg[-1] != self._seg[-2]:
