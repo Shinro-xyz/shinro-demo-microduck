@@ -127,10 +127,11 @@ make interop                       # the same .so from C, C++, Zig, Rust, Python
 make footprint                     # deployment host vs shinro adapter vs onnxruntime
 ```
 
-![Microduck walking, driven by the compiled kernel](docs/media/microduck_walk.gif)
+![The compiled kernel tracking the circle reference path, closed loop](docs/media/microduck_trajectory_circle.gif)
 
-_Standing → walking → turning: one continuous 12 s run, whose only control law is the
-compiled `.so`._
+_The compiled `.so` following the circle reference path closed-loop — a full lap,
+driven only by the kernel's 14-D action and the host-side tracker that feeds it the
+command block._
 
 The reference-path layers (`MicroduckLoop`, `PurePursuitTracker`) are registered
 shinro components built through shinro's own factories — but they run **beside** the
