@@ -303,6 +303,40 @@ The measured surface of the compiled artifact; the Cake path re-runs the same gr
 | embed | C, C++, Zig, Rust, Python | five hosts agree | bit-identical |
 | track | preset reference path, closed loop | cross-track / coverage | `8.6 mm` / `100%` |
 
+## Prerequisites
+
+A 64-bit Linux machine, and:
+
+| | |
+| --- | --- |
+| `git`, `curl`, `tar`, `sha256sum` | to clone and to fetch the release; coreutils ships the last two |
+| `gpg` | optional — only to check the release signature. The fetcher says clearly when it cannot |
+| **Python 3.12 or newer** | the demo's deployment host and the framework |
+| **a usable `pip`** | see below. This is the one that bites |
+
+**Create a virtualenv first.** A bare `pip` is absent from `PATH` on many current
+distributions — and `python3 -m pip` can be missing too — so the first documented
+command fails before it does anything:
+
+```bash
+make venv                              # creates .venv and upgrades pip inside it
+make install PYTHON=.venv/bin/python   # the pinned framework + this repo's extras
+```
+
+Then carry the same `PYTHON` through the rest:
+
+```bash
+make fetch-cake PYTHON=.venv/bin/python
+make cake       PYTHON=.venv/bin/python
+```
+
+One interpreter for install, the demo and the tests. Installing against one interpreter
+and running against another is how a package that installed successfully becomes
+`ModuleNotFoundError`.
+
+If your system interpreter already has a working `pip`, `make install` alone is fine —
+`PYTHON` defaults to `python3`.
+
 ## Quickstart
 
 ```bash

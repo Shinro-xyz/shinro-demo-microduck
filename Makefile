@@ -9,19 +9,32 @@ SHINRO_VERSION ?= v0.3.0
 SHINRO_WHEEL ?= https://github.com/Shinro-xyz/shinro-python-modules/releases/download/$(SHINRO_VERSION)/shinro-$(SHINRO_VERSION:v%=%)-py3-none-any.whl
 # Path to a local shinro checkout, for `make install-editable`.
 SHINRO ?= ../shinro-python-modules
-# Interpreter for the demo/tests. Override when the deps live in a venv:
-#   make demo PYTHON=.venv/bin/python
+# Interpreter for install, the demo and the tests — one interpreter for all
+# three. `pip` is deliberately NOT called directly: a bare `pip` is absent from
+# PATH on many current distributions (and `python3 -m pip` can be missing too),
+# and installing against one interpreter while running against another is the
+# classic "ModuleNotFoundError on a package that just installed" trap.
+#   make venv && make install PYTHON=.venv/bin/python
 PYTHON ?= python3
+
+# A virtualenv to install into. Use this when the machine has no usable pip.
+.PHONY: venv
+venv:
+	python3 -m venv .venv
+	.venv/bin/python -m pip install --upgrade pip
+	@echo
+	@echo "now run:   make install PYTHON=.venv/bin/python"
+	@echo "then:      make fetch-cake PYTHON=.venv/bin/python && make cake PYTHON=.venv/bin/python"
 
 # The documented install: the pinned release. No sibling checkout needed.
 install:
-	pip install "shinro[onnx-rl] @ $(SHINRO_WHEEL)"
-	pip install -e ".[mujoco,media,dev]"
+	$(PYTHON) -m pip install "shinro[onnx-rl] @ $(SHINRO_WHEEL)"
+	$(PYTHON) -m pip install -e ".[mujoco,media,dev]"
 
 # Local development against a working tree instead of the pinned release.
 install-editable:
-	pip install -e "$(SHINRO)[onnx-rl]"
-	pip install -e ".[mujoco,media,dev]"
+	$(PYTHON) -m pip install -e "$(SHINRO)[onnx-rl]"
+	$(PYTHON) -m pip install -e ".[mujoco,media,dev]"
 
 # Compile the walking policy ONNX into a Zig kernel (`lib/lib_neural_network.so`
 # + graph manifest). `shinro build` runs the oracle gate: the graph is lowered,
