@@ -306,7 +306,7 @@ The measured surface of the compiled artifact; the Cake path re-runs the same gr
 ## Quickstart
 
 ```bash
-make install         # the sibling shinro checkout + this repo's extras
+make install         # the pinned shinro release + this repo's extras (no sibling checkout)
 make compile         # ONNX -> lib/lib_neural_network.so (runs the oracle gate)
 make live            # watch it: real-time MuJoCo viewer, keys switch command
 make gif             # the small showcase GIF this README embeds
@@ -341,6 +341,58 @@ Replay one command, or skip the renderer:
 python -m demos.demo_compiled_policy forward
 python -m demos.demo_compiled_policy --no-video            # metrics only
 MUJOCO_GL=glfw python -m demos.demo_compiled_policy        # desktop GL
+```
+
+## Run it on Cake — the precompiled release
+
+`make cake` is the command this repository exists for. It fetches a precompiled Cake
+release, loads the walking policy as a Cake module, and replaces the trajectory module
+**while the robot walks** — no restart, no missed tick.
+
+```bash
+make fetch-cake      # download + verify the release for this machine (x86_64 is published)
+bin/doctor.sh        # can this machine run the binaries?
+bin/verify.sh        # are the bytes the ones that were signed, and are they clean?
+make cake            # circle -> eight -> slalom, swapped live, rendered
+tests/smoke.sh       # the acceptance test; ends in MICRODUCK-CAKE SMOKE: PASS
+```
+
+## Running it again
+
+Nothing needs re-fetching after the first run — the release stays in `releases/`, and
+`bin/fetch-release.sh` will tell you it already has the assets.
+
+| to do this | run |
+| --- | --- |
+| rerun exactly as before | `make cake` |
+| rerun without rendering (much faster) | `make cake GIF=` |
+| start from a different path | `make cake TRAJ=slalom` |
+| a different live swap | `make cake SWAP=circle,eight,slalom` |
+| a shorter or longer run | `make cake SECS=9` (default 24) |
+| the anchored capsules, which re-parent each path onto the duck at the swap, so the hand-over shows no cross-track step | `make cake ANCHOR=1` |
+| the acceptance test | `tests/smoke.sh` |
+| re-check the fetched release | `make cake-verify` · `make cake-doctor` |
+| re-download the release — only needed if `VERSION` changed | `make fetch-cake` |
+
+Every run starts clean: `make cake` removes `state/run/` before staging, so there is no
+run-to-run state to clear by hand.
+
+**Where things land.** The run leaves its evidence in `state/run/`: `trace.csv` (per tick
+`t,x,y,z,cross_track`), `swaps.json` (each swap's transaction phase and the session
+identity around it), `resident.out` and `client.out`. The GIF and the swap figure go to
+`docs/media/cake/` by default — **which is a tracked directory**, so a default `make cake`
+rewrites committed files and leaves your checkout dirty. Send the media elsewhere to keep
+the tree clean:
+
+```bash
+make cake MEDIA_DIR=/tmp/duck
+```
+
+If the dependencies live in a virtualenv, point the runner at it — an explicit `PYTHON`
+takes precedence over any `.venv`, so a stale one cannot shadow your install:
+
+```bash
+make cake PYTHON=.venv/bin/python
 ```
 
 ## Watch it
