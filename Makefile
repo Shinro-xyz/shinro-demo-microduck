@@ -131,7 +131,12 @@ SECS ?= 24
 # GIF=cake|full|compact|trajectory, or GIF= to skip. The walk GIF and the
 # swap-handling figure are written to MEDIA_DIR (committed under docs/media/cake/).
 GIF ?= cake
-MEDIA_DIR ?= docs/media/cake
+# The demo's media: the walk GIF and the swap-handling figure. The default is
+# OUTSIDE the tracked tree, because a plain `make cake` must not dirty the
+# reader's clone. Regenerating the media this README embeds is the deliberate
+# opt-in:
+#   make cake MEDIA_DIR=docs/media/cake
+MEDIA_DIR ?= state/media
 # ANCHOR=1 selects the anchored trajectory capsules (each path re-parented onto
 # the duck at its swap) instead of the world-fixed ones.
 ANCHOR ?=

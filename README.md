@@ -169,7 +169,9 @@ What a run does:
    unchanged**, the slot uuid is unchanged, and the drain retires every module — then
    renders and PASSes.
 
-`make cake` writes two artifacts to `docs/media/cake/`:
+`make cake` writes two artifacts to `state/media/` (override with `MEDIA_DIR=`; the
+copies this README embeds live under `docs/media/cake/` and are regenerated deliberately
+with `make cake MEDIA_DIR=docs/media/cake`):
 
 - `microduck_cake_walk.gif` — the 3-D walk beside a bird's-eye panel that **colours
   the path by the trajectory module driving it**, marks each swap, and shows the
@@ -414,12 +416,12 @@ run-to-run state to clear by hand.
 **Where things land.** The run leaves its evidence in `state/run/`: `trace.csv` (per tick
 `t,x,y,z,cross_track`), `swaps.json` (each swap's transaction phase and the session
 identity around it), `resident.out` and `client.out`. The GIF and the swap figure go to
-`docs/media/cake/` by default — **which is a tracked directory**, so a default `make cake`
-rewrites committed files and leaves your checkout dirty. Send the media elsewhere to keep
-the tree clean:
+`state/media/` by default — outside the tracked tree, so a plain `make cake` never dirties
+your clone. The copies this README embeds are regenerated as a deliberate opt-in:
 
 ```bash
-make cake MEDIA_DIR=/tmp/duck
+make cake MEDIA_DIR=docs/media/cake   # rewrite the committed media
+make cake MEDIA_DIR=/tmp/duck         # or send it anywhere else
 ```
 
 If the dependencies live in a virtualenv, point the runner at it — an explicit `PYTHON`
