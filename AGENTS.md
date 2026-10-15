@@ -32,6 +32,7 @@ framework logic (build, trace, oracle, verify all live in the package).
 | `make gif` / `make demo` / `make trajectory T=circle` | offline renders |
 | `make footprint` | deployment host vs onnxruntime: size, RSS, latency (+ on-Pi) |
 | `make cake` | run the policy as a Cake module (Cake resident + live MuJoCo plant; `TRAJ=`, `SWAP=`, `SECS=`, `GIF=`); default is a 24 s circle→eight→slalom live swap, rendering the walk GIF + the swap figure to `docs/media/cake/` |
+| `make policy-swap` | swap the **policy** live (`FROM=`, `TO=` ∈ {stand,walk}, `PSECS=`); a leaf behind the resident's stable bridge, so the walk continues through the swap. See `docs/cake-policy-swap.md` |
 | `make fetch-cake` | download + verify the precompiled Cake release (`x86_64` desktop only) |
 | `make test` / `make test-quick` | full suite / no-sim smoke check |
 
@@ -52,7 +53,7 @@ framework logic (build, trace, oracle, verify all live in the package).
 | `scenarios/`, `configs/`, `models/` | compile scenario, component configs, vendored ONNX |
 | `src/shinro_demo_microduck/assets/microduck/` | vendored MJCF + meshes (verbatim from training) |
 | `interop/` | C / C++ / Zig / Rust / Python hosts for the C ABI |
-| `docs/` | compiled-inference, policy-contract, fidelity, footprint, trajectories, provenance |
+| `docs/` | compiled-inference, policy-contract, fidelity, footprint, trajectories, provenance, cake-policy-swap |
 
 ## Build chain (where things happen)
 
@@ -91,6 +92,11 @@ stamp → verify. The ONNX conversion is `shinro/codegen/onnx_import.py`
   their build live in the private `shinro-bench/cake` tree; **do not add Cake
   source, a `cake_*` header, or a descriptor to this repo** — the wire is the
   ABI-free port layout. See `bin/README.md` and `docs/cake-control-plane.md`.
+  The **policy** is swappable the same way once it is a leaf: `make policy-swap`
+  stages the split topology (a stable `bridge` owns the socket and the clock,
+  the policy is a leaf it consumes with a live binding) and swaps it without
+  stopping the walk, where swapping the *fused* policy completes the transaction
+  but tears the plant link down. See `docs/cake-policy-swap.md`.
 - **MuJoCo assets are vendored verbatim** — don't edit `assets/microduck/`. The
   home pose is *not* self-stabilizing; the policy balances (a test pins this, so
   don't "fix" it by stiffening the hold).

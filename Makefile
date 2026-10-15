@@ -151,6 +151,19 @@ cake-doctor:
 cake:
 	MEDIA_DIR=$(MEDIA_DIR) GIF=$(GIF) ANCHOR=$(ANCHOR) bin/run-demo.sh --seconds $(SECS) --trajectory $(TRAJ) $(if $(SWAP),--swap $(SWAP))
 
+# The policy swap: the same `replace-slot` transaction as `make cake`, applied
+# to the policy *leaf* instead of the trajectory. The policy is a leaf behind the
+# resident's stable bridge, so the swap does not stop the walk (swapping the
+# fused policy would complete the transaction but tear the plant link down).
+# FROM/TO are stand|walk:
+#   make policy-swap                  # stand -> walk: the duck stands, then walks
+#   make policy-swap FROM=walk TO=stand
+FROM ?= stand
+TO ?= walk
+PSECS ?= 10
+policy-swap:
+	MEDIA_DIR=$(MEDIA_DIR) GIF=$(GIF) bin/run-policy-swap.sh --seconds $(PSECS) --from $(FROM) --to $(TO)
+
 test:
 	$(PYTHON) -m pytest tests/ -v --tb=short
 
