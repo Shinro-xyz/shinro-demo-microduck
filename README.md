@@ -17,6 +17,19 @@ separate Cake module; `replace-slot` hands the walking policy a new one while th
 resident keeps running and the 50 Hz loop never drops a tick — the panel colours
 the path by the module driving it. `make cake` · [details](docs/cake-control-plane.md)._
 
+**Two parts of the running graph, swapped live by the same `replace-slot`.** Both
+figures below are single runs: the trunk path coloured by the module (left) or the
+policy (right) driving it, and — beneath it — the update transaction Cake ran. On
+the left the **trajectory** module changes and the policy runs throughout; on the
+right the **policy** is a leaf and the resident's stable `bridge` — which owns the
+sim socket and the 50 Hz clock — runs throughout, so the walk survives the swap too
+rather than the plant link being torn down with the thread that owned it.
+
+| trajectory swap — `make cake` | policy swap — `make policy-swap` |
+| :---: | :---: |
+| ![The trajectory module replaced live under a running policy](docs/media/cake/microduck_cake_swap.png) | ![The policy leaf replaced live under the stable bridge](docs/media/cake/microduck_cake_policy_swap.png) |
+| the swappable module owns the loop; the **policy** band runs throughout | the **bridge** (socket + clock) runs throughout; only the policy leaf's generation moves |
+
 ## Highlights
 
 - **Compiled, not wrapped.** The observation encoder, the network and the action
@@ -151,6 +164,8 @@ make cake                          # circle -> eight -> slalom live, rendered (d
 make cake SECS=9                   # shorter
 make cake SWAP=circle,eight        # a two-trajectory swap
 make cake GIF=                     # skip the render (GIF=cake|full|compact|trajectory)
+make policy-swap                   # swap the *policy* leaf live: stand -> walk
+make policy-swap FROM=walk TO=stand
 ```
 
 What a run does:
