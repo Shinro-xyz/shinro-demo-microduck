@@ -519,6 +519,7 @@ class SwapPanels:
         duration,
         *,
         references: list[np.ndarray | None] | None = None,
+        label: str = "trajectory module",
         wh: tuple[float, float] = (6.2, 6.6),
         dpi: int = 100,
     ) -> None:
@@ -534,7 +535,7 @@ class SwapPanels:
         self.fig = plt.figure(figsize=wh, dpi=dpi)
         gs = self.fig.add_gridspec(3, 1, height_ratios=[3.0, 1.6, 0.7], hspace=0.5)
         self.ax = self.fig.add_subplot(gs[0, 0])
-        self.ax.set_title("bird's-eye trunk path vs reference, coloured by trajectory module", fontsize=11)
+        self.ax.set_title(f"bird's-eye trunk path vs reference, coloured by {label}", fontsize=11)
         # The reference each module steers toward, dashed and without a legend
         # entry: the trunk line already names the module. Kept so an anchored run
         # can re-place a segment's reference once its anchor is known.
@@ -559,7 +560,7 @@ class SwapPanels:
         self.ax.legend(loc="best", fontsize=8, framealpha=0.9)
 
         self.axerr = self.fig.add_subplot(gs[1, 0])
-        self.axerr.set_title("tracking error (cross-track |Δ|), coloured by trajectory module", fontsize=9)
+        self.axerr.set_title(f"tracking error (cross-track |Δ|), coloured by {label}", fontsize=9)
         self.lines_err = [
             self.axerr.plot([], [], "-", color=_SEGMENT_COLORS[i % len(_SEGMENT_COLORS)], lw=1.8)[0] for i in range(len(self.names))
         ]
@@ -587,7 +588,7 @@ class SwapPanels:
         self.axt.set_ylim(0.0, 1.0)
         self.axt.set_yticks([])
         self.axt.set_xlabel("t [s]")
-        self.axt.set_title("trajectory module active over time (dashed = replace-slot swap)", fontsize=9)
+        self.axt.set_title(f"{label} active over time (dashed = replace-slot swap)", fontsize=9)
 
     def segment_at(self, t: float) -> int:
         """Index of the trajectory active at ``t`` seconds."""

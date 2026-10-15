@@ -40,6 +40,9 @@ GIF_PROFILE="${GIF-compact}"
 MEDIA_DIR="${MEDIA_DIR-}"
 # How long the run must survive for the walk to count as not stopped.
 MIN_STEPS_FRACTION=7
+# Seconds the initial policy is given to settle before the swap (the duck
+# balances under the standing network). Also the render panel's swap boundary.
+SETTLE_S=2
 while [ $# -gt 0 ]; do
     case "$1" in
         --seconds) SECONDS_TO_RUN="$2"; shift 2 ;;
@@ -158,8 +161,13 @@ trap cleanup EXIT
 md_say "starting the MuJoCo client on $SOCK"
 gif_args=()
 if [ -n "$GIF_PROFILE" ]; then
-    schedule="${TRAJECTORY}@0.00"
+    # The panel colours the path and the bottom strip by the *policy* segment, so
+    # the swap is visible in the GIF itself: `--schedule` names the policies and
+    # `--reference` the single trajectory both track. The boundary is the nominal
+    # settle time; the figure (.png) carries the measured swap instead.
+    schedule="${FROM}@0,${TO}@${SETTLE_S}"
     gif_args=(--gif "$GIF_PROFILE" --out-dir "$MEDIA_DIR" --schedule "$schedule"
+        --reference "$TRAJECTORY" --module-label "policy"
         --panel-duration "$SECONDS_TO_RUN" --video-name "microduck_cake_policy_swap.gif")
 fi
 (cd "$MD_ROOT" && exec "$CLIENT_PY" -m demos.demo_cake_policy \
@@ -179,8 +187,7 @@ if ! md_grep_wait "ready pid=" "$RUN_DIR/resident.out" 400; then
     md_fail "resident start failed"
 fi
 
-# Let the initial policy settle (the duck balances under the stand policy).
-SETTLE_S=2
+# Let the initial policy settle (the duck balances under the standing network).
 sleep "$SETTLE_S"
 
 policy_uuid="$(md_slot_uuid "$ADMIN_PROBE" "$ADMIN" policy)"
