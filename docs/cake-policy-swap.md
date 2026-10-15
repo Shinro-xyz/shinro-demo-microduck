@@ -48,9 +48,18 @@ The observable difference:
 | plant link | **torn down** — the sim client exits | **held** — the walk continues |
 | result | duck stops at the swap | duck stands, then walks |
 
-The committed figure `docs/media/cake/microduck_cake_policy_swap.gif` is a
-`make policy-swap` run: the duck balances in place under the standing policy for
-the first two seconds, then — from the swap onward — walks the circle.
+`make policy-swap` writes two figures under `MEDIA_DIR` (the committed copies
+live in `docs/media/cake/`):
+
+* `microduck_cake_policy_swap.gif` — the run itself: the duck balances in place
+  under the standing policy for the first two seconds, then — from the swap
+  onward — walks the circle; and
+* `microduck_cake_policy_swap.png` — the run drawn the way the trajectory swap's
+  figure is (`scripts/plot_cake_policy_swap.py`): the trunk path coloured by
+  **which policy** drove it, the trunk speed beside it (near zero while it
+  balances, ~0.2 m/s once it walks), and the running graph — the stable
+  `bridge` across the whole axis, only the `policy` leaf's generation moving,
+  the trajectory unchanged — over the update transaction that moved it.
 
 ## Reading the result
 
