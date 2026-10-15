@@ -167,6 +167,9 @@ fi
     >"$CLIENT_LOG" 2>&1 &
 CLIENT_PID=$!
 md_wait_for_file "$SOCK" 200 || { cat "$CLIENT_LOG"; md_fail "client never bound $SOCK"; }
+# Wall clock at the run's start, so the figure can place the swap marker: the
+# client paces the loop at 50 Hz, so wall time tracks the trace's own t.
+T_RUN_START="$(date +%s.%N)"
 
 md_say "starting $(basename "$BUNDLE/bin/cake-resident")"
 "$BUNDLE/bin/cake-resident" --config "$CONF" >"$RUN_DIR/resident.out" 2>"$RUN_DIR/resident.err" &
@@ -196,12 +199,22 @@ swap_uuid="$(head -c16 /dev/urandom | od -An -tx1 | tr -d ' \n')"
 swap_out="$("$ADMIN_PROBE" request "$ADMIN" replace-slot --uuid "$swap_uuid" --payload "$PAYLOAD" 2>&1)"
 printf '%s\n' "$swap_out" | sed 's/^/microduck-cake: /'
 printf '%s\n' "$swap_out" | grep -q '^status ok' || md_fail "the policy replace-slot was refused"
+SWAP_AT_S="$(awk -v a="$T_RUN_START" -v b="$(date +%s.%N)" 'BEGIN { printf "%.2f", b - a }')"
 
 # Read the post-swap facts while the resident is still up: once it stops, the
 # admin plane is gone and a `get-status` returns nothing to compare.
 phase="$(printf '%s\n' "$swap_out" | sed -nE 's/^transaction_phase (.*)$/\1/p' | head -1)"
 session_after="$(md_status_field "$ADMIN_PROBE" "$ADMIN" session_uuid)"
 policy_uuid_after="$(md_slot_uuid "$ADMIN_PROBE" "$ADMIN" policy)"
+
+# The facts behind the figure: the swap, its outcome, and the session it left.
+"$CLIENT_PY" - "$RUN_DIR/policy_swap.json" "$FROM" "$TO" "$SWAP_AT_S" "$phase" "$session_before" "$SECONDS_TO_RUN" <<'PY'
+import json, sys
+out, frm, to, at_s, phase, session, duration = sys.argv[1:8]
+with open(out, "w") as fh:
+    json.dump({"from": frm, "to": to, "at_s": float(at_s), "phase": phase,
+               "session": session, "duration_s": float(duration)}, fh, indent=2)
+PY
 
 # Run out the rest of the window so the post-swap behaviour is measured too.
 sleep "$(awk -v s="$SECONDS_TO_RUN" -v w="$SETTLE_S" 'BEGIN { printf "%.2f", s - w }')"
@@ -247,5 +260,12 @@ for line in open(sys.argv[1]):
 else:
     sys.exit("walk: the client produced no metrics")
 PY
+
+# The swap figure, beside the GIF: the path coloured by policy and the graph
+# the transaction moved. Only when rendering is on.
+if [ -n "$GIF_PROFILE" ] && [ -f "$RUN_DIR/policy_swap.json" ]; then
+    "$CLIENT_PY" "$MD_ROOT/scripts/plot_cake_policy_swap.py" --run-dir "$RUN_DIR" \
+        --out "$MEDIA_DIR/microduck_cake_policy_swap.png" 2>&1 | sed 's/^/microduck-cake: /' || true
+fi
 
 md_say "policy swap ($FROM -> $TO): PASS — transaction COMPLETED, session unchanged, the bridge held the plant link through the swap"
