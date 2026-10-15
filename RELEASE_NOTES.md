@@ -1,20 +1,35 @@
-# v0.1.0 — the Cake bundle for the Microduck demo
+# v0.1.0 — the Cake bundles for the Microduck demo
 
-The precompiled Cake release `shinro-demo-microduck` fetches. Two assets:
+The precompiled Cake releases `shinro-demo-microduck` fetches. There are two
+**flavours**, each at `v0.1.0` under its own tag, and each a bundle plus a digest:
 
-| asset | |
-| --- | --- |
-| `microduck-cake-v0.1.0-x86_64.tar.gz` | the bundle |
-| `SHA256SUMS` | its digest, and the check `bin/fetch-release.sh` makes |
+| release | tag | bundle |
+| --- | --- | --- |
+| trajectory (`make cake`) | `v0.1.0` | `microduck-cake-v0.1.0-x86_64.tar.gz` |
+| policy-swap (`make policy-swap`) | `policyswap-v0.1.0` | `microduck-cake-policyswap-v0.1.0-x86_64.tar.gz` |
 
-## What is in it
+`SHA256SUMS`, in each release, is the digest, and the check `bin/fetch-release.sh`
+makes.
+
+## What is in them
+
+Both bundles carry:
 
 - `bin/cake-resident` — the control plane
 - `bin/admin-probe` — the admin client the demo queries slots and sessions with
 - `bin/cake-pack` — stages the Plan
-- `caps/microduck.cakecap` — the walking policy, compiled from Pollen Robotics' published ONNX
-- `caps/trajectory_{forward,circle,eight,slalom}.cakecap` and their four `_anchor` variants — the swappable trajectory modules
 - `LICENSE`, `NOTICE-cake-binaries.txt`, `VERSION`
+
+The **trajectory** bundle then adds:
+
+- `caps/microduck.cakecap` — the fused walking policy, compiled from Pollen Robotics' published ONNX
+- `caps/trajectory_{forward,circle,eight,slalom}.cakecap` and their four `_anchor` variants — the swappable trajectory modules
+
+The **policy-swap** bundle carries no fused capsule. It adds:
+
+- `caps/microduck_bridge.cakecap` — the stable bridge that owns the sim socket and the 50 Hz tick
+- `caps/microduck_policy.cakecap`, `caps/microduck_policy_stand.cakecap`, `caps/microduck_policy_alt.cakecap` — the walking and standing policy leaves and the swap target
+- the same `trajectory_*` capsules, so the split topology has a trajectory provider
 
 `x86_64` only. This demonstration is a **desktop simulation** by design, so there is no
 `aarch64` bundle and the Raspberry Pi row of `docs/targets.md` does not apply to the Cake
@@ -26,14 +41,19 @@ cross-compile to `aarch64`.)
 ```sh
 git clone https://github.com/Shinro-xyz/shinro-demo-microduck.git
 cd shinro-demo-microduck
-make install          # the pinned shinro wheel + the demo's extras
-make fetch-cake       # this release
-bin/doctor.sh         # can this machine run the binaries?
-make cake             # circle -> eight -> slalom, swapped live, rendered
+make install                  # the pinned shinro wheel + the demo's extras
+make fetch-cake               # the trajectory release
+bin/doctor.sh                 # can this machine run the binaries?
+make cake                     # circle -> eight -> slalom, swapped live, rendered
+make fetch-cake-policy-swap   # the policy-swap release
+bin/doctor.sh --flavour policy-swap
+make policy-swap              # swap the policy leaf live: stand -> walk
 ```
 
 `make cake` should end in `microduck-cake: microduck Cake demo: PASS`, having replaced
 the trajectory module twice mid-walk with the resident's session identity unchanged.
+`make policy-swap` should end in `microduck-cake: policy swap (stand -> walk): PASS`,
+the policy transaction `COMPLETED` and the walk still running.
 
 ## Known deviations, stated rather than hidden
 

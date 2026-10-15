@@ -5,7 +5,7 @@ half: swapping the **policy** under a live clock — the same `replace-slot`
 transaction, applied to the module that computes the robot's action.
 
 ```sh
-make fetch-cake
+make fetch-cake-policy-swap         # the policy-swap demo is its own release
 make policy-swap                    # stand -> walk: the duck stands, then walks
 make policy-swap FROM=walk TO=stand # the other direction
 make policy-swap PSECS=6            # shorter run

@@ -19,10 +19,12 @@ shinro-demo-microduck/bin/            shinro-bench/cake/ (private)      shinro-c
 ## Use it
 
 ```bash
-make fetch-cake          # download + verify the release for this target
-make cake                # circle trajectory, 8 s
-make cake TRAJ=slalom SECS=8
-make cake SWAP=circle,eight,slalom SECS=9   # switch trajectory live, no restart
+make fetch-cake              # download + verify the release for this target
+make cake                    # circle -> eight -> slalom, 24 s, rendered (default)
+make cake TRAJ=slalom SECS=8 # a different path, shorter
+make cake SWAP=circle,eight SECS=9  # switch trajectory live, no restart
+make fetch-cake-policy-swap  # the policy-swap demo is its own release
+make policy-swap             # swap the policy leaf live: stand -> walk
 ```
 
 Or directly:

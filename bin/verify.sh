@@ -17,20 +17,39 @@ set -uo pipefail
 . "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib/common.sh"
 
 DIR=""
+FLAVOUR=""
 while [ $# -gt 0 ]; do
     case "$1" in
         --at) DIR="${2:?--at needs a directory}"; shift 2 ;;
-        -h | --help) echo "usage: bin/verify.sh [--at RELEASE_DIR]"; exit 0 ;;
+        --flavour) FLAVOUR="${2:?--flavour needs a value}"; shift 2 ;;
+        -h | --help) echo "usage: bin/verify.sh [--at RELEASE_DIR] [--flavour trajectory|policy-swap]"; exit 0 ;;
         *) md_fail "unrecognised argument '$1'" 5 ;;
     esac
 done
+# The flavour decides which capsules the bundle must hold and which per-flavour
+# download cache its SHA256SUMS lives in. Default `trajectory` (the bare
+# release); when `--at` names a fetched bundle, infer the flavour from its
+# directory name so `bin/verify.sh --at releases/x86_64-policyswap` just works.
+if [ -z "$FLAVOUR" ]; then
+    if [ -z "$DIR" ]; then
+        FLAVOUR="trajectory"
+    else
+        case "$(basename "$DIR")" in
+            *-policyswap) FLAVOUR="policy-swap" ;;
+            *) FLAVOUR="trajectory" ;;
+        esac
+    fi
+fi
+md_flavour_tag "$FLAVOUR" "$MD_VERSION" >/dev/null ||
+    md_fail "unknown --flavour '$FLAVOUR' (trajectory or policy-swap)" 5
 if [ -z "$DIR" ]; then
-    DIR="$(md_binaries_dir)" || md_fail "no release for $(md_arch); run bin/fetch-release.sh first" 3
+    DIR="$(md_binaries_dir "$FLAVOUR")" || md_fail "no release for $(md_arch); run bin/fetch-release.sh first" 3
 fi
 [ -d "$DIR" ] || md_fail "no such directory: $DIR" 3
 
 echo "microduck-cake verify"
 echo "  release          $MD_VERSION"
+echo "  flavour          $FLAVOUR"
 echo "  target           $(basename "$DIR")"
 echo "  directory        $DIR"
 if [ -f "$DIR/MANIFEST.txt" ]; then
@@ -44,18 +63,29 @@ MISSING=0
 for b in cake-resident admin-probe cake-pack; do
     [ -x "$DIR/bin/$b" ] || { echo "  MISSING  bin/$b"; MISSING=$((MISSING + 1)); }
 done
-[ -f "$DIR/caps/microduck.cakecap" ] || { echo "  MISSING  caps/microduck.cakecap"; MISSING=$((MISSING + 1)); }
+case "$FLAVOUR" in
+    trajectory)
+        [ -f "$DIR/caps/microduck.cakecap" ] || { echo "  MISSING  caps/microduck.cakecap"; MISSING=$((MISSING + 1)); }
+        ;;
+    policy-swap)
+        for cap in microduck_bridge microduck_policy microduck_policy_stand; do
+            [ -f "$DIR/caps/$cap.cakecap" ] || { echo "  MISSING  caps/$cap.cakecap"; MISSING=$((MISSING + 1)); }
+        done
+        ;;
+esac
 if [ "$MISSING" -ne 0 ]; then
     echo
-    echo "This directory is not a complete release bundle. Run bin/fetch-release.sh."
+    echo "This directory is not a complete $FLAVOUR release bundle."
+    echo "Run bin/fetch-release.sh --flavour $FLAVOUR."
     exit 3
 fi
 
 echo "1. digests"
 # SHA256SUMS is a release asset, not a file inside the tarball; the fetcher keeps
-# it under releases/downloads/<version>/. Look in both places.
+# it under releases/downloads/<flavour-slug>/. Look in both places.
+DL="$(dirname "$DIR")/downloads/$(md_flavour_slug "$FLAVOUR" "$MD_VERSION")"
 SUMS=""
-for cand in "$DIR/SHA256SUMS" "$(dirname "$DIR")/downloads/$MD_VERSION/SHA256SUMS"; do
+for cand in "$DIR/SHA256SUMS" "$DL/SHA256SUMS"; do
     [ -f "$cand" ] && SUMS="$cand" && break
 done
 DIGESTS_OK=0
@@ -82,7 +112,7 @@ echo "2. signing key"
 # release process, not a defect in the bytes, and the digest above still holds —
 # so it warns, loudly, and bin/fetch-release.sh warns again at download time.
 SIG_PRESENT=0
-for a in "$DIR"/../downloads/"$MD_VERSION"/SHA256SUMS.asc "$DIR/../downloads/$MD_VERSION"/*.asc; do
+for a in "$DL/SHA256SUMS.asc" "$DL"/*.asc; do
     [ -f "$a" ] && SIG_PRESENT=1
 done
 if [ "$MD_KEY_UNSET" = "1" ]; then

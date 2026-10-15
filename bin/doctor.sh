@@ -14,10 +14,16 @@ set -uo pipefail
 
 while [ $# -gt 0 ]; do
     case "$1" in
-        -h | --help) echo "usage: bin/doctor.sh"; exit 0 ;;
+        --flavour) FLAVOUR="${2:?--flavour needs a value}"; shift 2 ;;
+        -h | --help) echo "usage: bin/doctor.sh [--flavour trajectory|policy-swap]"; exit 0 ;;
         *) md_fail "unrecognised argument '$1'" 5 ;;
     esac
 done
+# Which fetched release to probe. Default `trajectory`; the policy-swap demo is
+# its own release, so name it to check that bundle instead.
+FLAVOUR="${FLAVOUR:-trajectory}"
+md_flavour_tag "$FLAVOUR" "$MD_VERSION" >/dev/null ||
+    md_fail "unknown --flavour '$FLAVOUR' (trajectory or policy-swap)" 5
 
 md_need_tool timeout "it bounds each binary probe"
 
@@ -30,6 +36,7 @@ echo "  kernel           $MD_KERNEL"
 echo "  page size        $MD_PAGE_SIZE"
 echo "  glibc            ${MD_GLIBC:-unknown}"
 echo "  release target   ${MD_SLUG:-none published for this architecture}"
+echo "  release flavour  $FLAVOUR"
 echo "  classification   $CLASS"
 echo
 echo "This demonstration is a desktop simulation: x86_64 only, at a glibc floor of 2.34."
@@ -53,12 +60,12 @@ case "$CLASS" in
 esac
 echo
 
-DIR="$(md_binaries_dir)" || { echo "No release found for this architecture; run bin/fetch-release.sh first."; exit 5; }
+DIR="$(md_binaries_dir "$FLAVOUR")" || { echo "No $FLAVOUR release found for this architecture; run bin/fetch-release.sh --flavour $FLAVOUR first."; exit 5; }
 if [ ! -d "$DIR" ]; then
-    echo "No release found at $DIR; run bin/fetch-release.sh first."
+    echo "No release found at $DIR; run bin/fetch-release.sh --flavour $FLAVOUR first."
     exit 5
 fi
-md_check_binaries "$DIR"
+md_check_binaries "$DIR" "$FLAVOUR"
 echo "Shipped binaries under $DIR (one bounded no-op run each):"
 BAD=0
 for b in cake-resident admin-probe cake-pack; do
@@ -70,7 +77,14 @@ for b in cake-resident admin-probe cake-pack; do
     fi
 done
 echo
-echo "Next: bin/verify.sh, then tests/smoke.sh."
+echo "Next: bin/verify.sh --flavour $FLAVOUR, then tests/smoke.sh."
+# If the other release is also fetched, say how to probe it: one flavour per run.
+for other in trajectory policy-swap; do
+    [ "$other" = "$FLAVOUR" ] && continue
+    odir="$(md_binaries_dir "$other" 2>/dev/null)" || continue
+    [ -d "$odir" ] || continue
+    echo "Also fetched: $other at $odir (bin/doctor.sh --flavour $other)."
+done
 
 [ "$BAD" -eq 0 ] || exit 4
 [ "$CLASS" = "x86_64" ] || exit 3

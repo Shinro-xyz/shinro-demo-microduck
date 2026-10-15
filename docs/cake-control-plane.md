@@ -44,9 +44,9 @@ repository. The producer, the module and the descriptors live in the private
 
 ```bash
 make fetch-cake                 # download + verify the release for this target
-make cake                       # forward walk, 8 simulated seconds
-make cake CMD=forward-turn SECS=8
-make cake CMD=backward
+make cake                       # circle -> eight -> slalom, 24 s, rendered (default)
+make cake SECS=9                # shorter
+make cake GIF=                  # skip the render
 ```
 
 `make cake` stages a one-slot Plan from the fetched capsule, starts the resident
