@@ -18,16 +18,19 @@ set -uo pipefail
 
 SLUG=""
 FROM=""
+FLAVOUR="trajectory"
 VERSION="$MD_VERSION"
 while [ $# -gt 0 ]; do
     case "$1" in
         --target) SLUG="${2:?--target needs a slug}"; shift 2 ;;
+        --flavour) FLAVOUR="${2:?--flavour needs a value}"; shift 2 ;;
         --version) VERSION="${2:?--version needs a value}"; shift 2 ;;
         --from) FROM="${2:?--from needs a directory}"; shift 2 ;;
-        -h | --help) echo "usage: bin/fetch-release.sh [--target x86_64] [--version vX.Y.Z] [--from DIR]"; exit 0 ;;
+        -h | --help) echo "usage: bin/fetch-release.sh [--target x86_64] [--flavour trajectory|policy-swap] [--version vX.Y.Z] [--from DIR]"; exit 0 ;;
         *) md_fail "unrecognised argument '$1'" 5 ;;
     esac
 done
+md_flavour_tag "$FLAVOUR" "$VERSION" >/dev/null || md_fail "unknown --flavour '$FLAVOUR' (trajectory or policy-swap)" 5
 
 md_need_tool tar "install tar"
 md_need_tool sha256sum "coreutils ships it"
@@ -53,9 +56,11 @@ case "$SLUG" in
     *) md_fail "unknown target slug '$SLUG' (this demonstration publishes x86_64 only)" 5 ;;
 esac
 
-TARBALL="$(md_tarball_name "$VERSION" "$SLUG")"
-DEST="$MD_RELEASE_DIR/$SLUG"
-DL="$MD_RELEASE_DIR/downloads/$VERSION"
+TARBALL="$(md_tarball_name "$VERSION" "$SLUG" "$FLAVOUR")"
+DEST="$MD_RELEASE_DIR/$(md_flavour_slug "$FLAVOUR" "$SLUG")"
+# Each flavour is its own release, so it has its own SHA256SUMS; keep the
+# download cache per flavour too, or the two would overwrite each other.
+DL="$MD_RELEASE_DIR/downloads/$(md_flavour_slug "$FLAVOUR" "$VERSION")"
 mkdir -p "$DL" || md_fail "cannot create $DL" 5
 
 if [ -n "$FROM" ]; then
@@ -68,7 +73,7 @@ if [ -n "$FROM" ]; then
         [ -f "$FROM/$a" ] && cp -- "$FROM/$a" "$DL/" 2>/dev/null
     done
 else
-    BASE="https://github.com/$MD_REPO/releases/download/$VERSION"
+    BASE="https://github.com/$MD_REPO/releases/download/$(md_flavour_tag "$FLAVOUR" "$VERSION")"
     # Bounded: a hung TLS handshake must not look like a slow download.
     for a in "$TARBALL" SHA256SUMS; do
         if [ -f "$DL/$a" ]; then
@@ -118,6 +123,6 @@ fi
 rm -rf -- "$DEST"
 mkdir -p "$DEST" || md_fail "cannot create $DEST" 5
 tar xzf "$DL/$TARBALL" -C "$DEST" --strip-components=1 || md_fail "$TARBALL did not extract" 5
-md_check_binaries "$DEST"
-md_say "release $VERSION for $SLUG is at $DEST"
+md_check_binaries "$DEST" "$FLAVOUR"
+md_say "release $VERSION ($FLAVOUR) for $SLUG is at $DEST"
 md_say "next: bin/doctor.sh"

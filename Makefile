@@ -142,6 +142,10 @@ MEDIA_DIR ?= state/media
 ANCHOR ?=
 fetch-cake:
 	bin/fetch-release.sh
+# The policy-swap demo is its own release (the split: the stable bridge + the
+# swappable policy leaves), so it is fetched separately from the trajectory one.
+fetch-cake-policy-swap:
+	bin/fetch-release.sh --flavour policy-swap
 # Is the fetched tarball shippable? Checks the dependency floor and scans for
 # build-tree paths. A tarball that fails either one must not be published.
 cake-verify:

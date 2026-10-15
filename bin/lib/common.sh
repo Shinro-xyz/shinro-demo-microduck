@@ -65,8 +65,44 @@ md_target_slug() {
 }
 
 md_tarball_name() {
-    # md_tarball_name VERSION SLUG
-    printf 'microduck-cake-%s-%s.tar.gz' "$1" "$2"
+    # md_tarball_name VERSION SLUG [FLAVOUR]: the release asset name. The
+    # `trajectory` flavour (the default) keeps the bare name, so existing
+    # releases resolve unchanged; `policy-swap` carries the flavour in the name.
+    local suffix=""
+    case "${3:-trajectory}" in
+        trajectory) ;;
+        policy-swap) suffix="-policyswap" ;;
+        *) return 1 ;;
+    esac
+    printf 'microduck-cake%s-%s-%s.tar.gz' "$suffix" "$1" "$2"
+}
+
+# --- flavours -----------------------------------------------------------------
+#
+# Two bundles are published, both at this repository's VERSION, each serving one
+# demo. `trajectory` (the default) is the fused policy + the swappable
+# trajectories — the `make cake` demo. `policy-swap` is the split: the stable
+# `bridge` + the swappable policy leaves + the trajectories, and carries no
+# fused capsule — the `make policy-swap` demo. They live in separate releases,
+# because a repository has one tag per version and the trajectory release owns
+# the bare `vX.Y.Z`, so the policy-swap release namespaces it.
+
+md_flavour_slug() {
+    # md_flavour_slug FLAVOUR SLUG: the release directory for a flavour.
+    case "$1" in
+        trajectory) printf '%s' "$2" ;;
+        policy-swap) printf '%s-policyswap' "$2" ;;
+        *) return 1 ;;
+    esac
+}
+
+md_flavour_tag() {
+    # md_flavour_tag FLAVOUR VERSION: the release tag that carries a flavour.
+    case "$1" in
+        trajectory) printf '%s' "$2" ;;
+        policy-swap) printf 'policyswap-%s' "$2" ;;
+        *) return 1 ;;
+    esac
 }
 
 # --- machine facts, for bin/doctor.sh ----------------------------------------
@@ -101,25 +137,40 @@ md_version_ge() {
 # --- the bundle ---------------------------------------------------------------
 
 md_binaries_dir() {
-    # Where the fetched release for this target lives, or non-zero if absent.
+    # md_binaries_dir [FLAVOUR]: where the fetched release for this target and
+    # flavour lives, or non-zero if absent.
     local slug="${MD_SLUG:-$(md_target_slug)}"
     [ -n "$slug" ] || return 1
-    printf '%s' "$MD_RELEASE_DIR/$slug"
+    local fs
+    fs="$(md_flavour_slug "${1:-trajectory}" "$slug")" || return 1
+    printf '%s' "$MD_RELEASE_DIR/$fs"
 }
 
 md_check_binaries() {
-    # md_check_binaries DIR: every shipped binary is present and executable.
-    local dir="$1" b
+    # md_check_binaries DIR [FLAVOUR]: every shipped binary is present and
+    # executable, and the flavour's capsules are there.
+    local dir="$1" flav="${2:-trajectory}" b
     for b in cake-resident admin-probe cake-pack; do
         [ -x "$dir/bin/$b" ] || md_fail "$dir is missing bin/$b (run bin/fetch-release.sh)" 5
     done
-    [ -f "$dir/caps/microduck.cakecap" ] || md_fail "$dir holds no caps/microduck.cakecap" 5
+    case "$flav" in
+        trajectory)
+            [ -f "$dir/caps/microduck.cakecap" ] || md_fail "$dir holds no caps/microduck.cakecap" 5
+            ;;
+        policy-swap)
+            for b in microduck_bridge microduck_policy microduck_policy_stand; do
+                [ -f "$dir/caps/$b.cakecap" ] || md_fail "$dir holds no caps/$b.cakecap (the policy-swap bundle)" 5
+            done
+            ;;
+        *) md_fail "unknown release flavour '$flav'" 5 ;;
+    esac
 }
 
 md_require_bundle() {
-    local dir
-    dir="$(md_binaries_dir)" || md_fail "no Cake release is published for $(md_arch); this demonstration is a desktop (x86_64) simulation" 3
-    md_check_binaries "$dir"
+    # md_require_bundle [FLAVOUR]
+    local flav="${1:-trajectory}" dir
+    dir="$(md_binaries_dir "$flav")" || md_fail "no Cake release is published for $(md_arch); this demonstration is a desktop (x86_64) simulation" 3
+    md_check_binaries "$dir" "$flav"
     printf '%s' "$dir"
 }
 
