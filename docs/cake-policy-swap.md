@@ -51,9 +51,12 @@ The observable difference:
 `make policy-swap` writes two figures under `MEDIA_DIR` (the committed copies
 live in `docs/media/cake/`):
 
-* `microduck_cake_policy_swap.gif` — the run itself: the duck balances in place
-  under the standing policy for the first two seconds, then — from the swap
-  onward — walks the circle; and
+* `microduck_cake_policy_swap.gif` — the run itself, with the same tracking
+  panel the trajectory GIF uses but driven by the *policy* schedule: the path is
+  coloured by which policy drove it, and the bottom strip, "policy active over
+  time (dashed = replace-slot swap)", names `stand` then `walk` across the swap.
+  The duck balances in place under the standing policy for the first two
+  seconds, then walks the circle; and
 * `microduck_cake_policy_swap.png` — the run drawn the way the trajectory swap's
   figure is (`scripts/plot_cake_policy_swap.py`): the trunk path coloured by
   **which policy** drove it, the trunk speed beside it (near zero while it

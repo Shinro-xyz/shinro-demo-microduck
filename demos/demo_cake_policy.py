@@ -189,6 +189,8 @@ def run(
     segments: list[tuple[str, float]] | None = None,
     panel_seconds: float | None = None,
     anchor: bool = False,
+    reference_traj: str | None = None,
+    module_label: str = "trajectory module",
     video_name: str = "microduck_cake_walk.gif",
 ) -> dict:
     # The sim's own `command` field is unused: the trajectory comes from the
@@ -213,9 +215,15 @@ def run(
     ctes: list[float] = []
     last_action = np.zeros(N_ACTIONS)
 
-    # The reference path each scheduled module tracks, so the client can measure
-    # cross-track error without reaching into the private capsule.
-    refs = [_reference_for(name) for name, _ in segments] if segments else None
+    # The reference path each scheduled segment tracks, so the client can measure
+    # cross-track error without reaching into the private capsule. A policy swap
+    # schedules *policy* segments (stand/walk) under one trajectory, so `reference`
+    # names the trajectory whose path every segment tracks.
+    if segments and reference_traj:
+        base = _reference_for(reference_traj)
+        refs = [base] * len(segments)
+    else:
+        refs = [_reference_for(name) for name, _ in segments] if segments else None
     # Anchored metric state: the capture is per segment (see the loop).
     anchor_seg = -1
     anchor_pose = (0.0, 0.0, 0.0)
@@ -236,7 +244,9 @@ def run(
         # The client is launched with a +40 s safety margin on the loop, so the
         # panel's time axis must follow the *intended* run, not the loop bound —
         # otherwise the walk only fills a third of the window.
-        panels = SwapPanels(seg_list, panel_seconds if panel_seconds is not None else seconds, references=seg_refs)
+        panels = SwapPanels(
+            seg_list, panel_seconds if panel_seconds is not None else seconds, references=seg_refs, label=module_label
+        )
         grabber = FrameGrabber(sim, render, panels)
         if not grabber.enabled:
             grabber = None
@@ -366,6 +376,16 @@ def main(argv: list[str] | None = None) -> int:
         help="the trajectory capsules re-parent their paths onto the duck; mirror that in the error metric",
     )
     parser.add_argument(
+        "--reference",
+        default=None,
+        help="trajectory whose path every scheduled segment tracks (for a policy swap: --schedule stand@0,walk@2 --reference circle)",
+    )
+    parser.add_argument(
+        "--module-label",
+        default="trajectory module",
+        help="what --schedule's segments are, for the panel titles (e.g. 'policy')",
+    )
+    parser.add_argument(
         "--video-name",
         default="microduck_cake_walk.gif",
         help="GIF file name under --out-dir",
@@ -386,6 +406,8 @@ def main(argv: list[str] | None = None) -> int:
         segments=segments,
         panel_seconds=args.panel_duration,
         anchor=args.anchor,
+        reference_traj=args.reference,
+        module_label=args.module_label,
         video_name=args.video_name,
     )
     if metrics["steps"] < 10:

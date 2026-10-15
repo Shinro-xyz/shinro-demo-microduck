@@ -161,8 +161,14 @@ cake:
 FROM ?= stand
 TO ?= walk
 PSECS ?= 10
+# GIF profile for the policy swap. The `cake` profile's 1080-px composite is
+# heavy enough to starve the two-thread split (the policy is a leaf behind a
+# separate clock owner), which makes the duck fall before the swap; `compact`
+# renders the same tracking panel — the path coloured by policy and the "policy
+# active over time" strip — at 720 px, and holds. PGIF=cake for the heavy one.
+PGIF ?= compact
 policy-swap:
-	MEDIA_DIR=$(MEDIA_DIR) GIF=$(GIF) bin/run-policy-swap.sh --seconds $(PSECS) --from $(FROM) --to $(TO)
+	MEDIA_DIR=$(MEDIA_DIR) GIF=$(PGIF) bin/run-policy-swap.sh --seconds $(PSECS) --from $(FROM) --to $(TO)
 
 test:
 	$(PYTHON) -m pytest tests/ -v --tb=short
