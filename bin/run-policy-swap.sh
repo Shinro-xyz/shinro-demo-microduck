@@ -71,7 +71,7 @@ TO_CAP="$(cap_for "$TO")"
 
 SLUG="${MD_SLUG:-$(md_target_slug)}"
 [ -n "$SLUG" ] || md_fail "no Cake release is published for $(md_arch); this demonstration is a desktop (x86_64) simulation" 3
-BUNDLE="$(md_require_bundle)"
+BUNDLE="$(md_require_bundle policy-swap)"
 ADMIN_PROBE="$BUNDLE/bin/admin-probe"
 CAKE_PACK="$BUNDLE/bin/cake-pack"
 HOST_FLAG=""
