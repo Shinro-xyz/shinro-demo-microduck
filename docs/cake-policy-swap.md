@@ -109,15 +109,25 @@ px and holds, which is why `make policy-swap` uses it; `PGIF=cake` selects the
 heavy one. That sensitivity is the price of the loose coupling — scheduler
 lockstep would remove it.
 
-## Requires a release with the split capsules
+## It is its own release
 
-This demo needs a release whose `caps/` carries `microduck_bridge`,
-`microduck_policy` and `microduck_policy_stand` alongside the fused
-`microduck` and the trajectories. The bundle builder ships them
-(`release/build-bundle.sh`); a release published before the split does not, and
-`bin/run-policy-swap.sh` says so plainly rather than failing obscurely. To test
-against a locally built bundle, point `MD_RELEASE_DIR` at its parent:
+`make policy-swap` runs from a **separate Cake release** from `make cake`. The
+policy-swap bundle carries the split — the stable `bridge`, the walking and
+standing policy leaves, and the trajectories — and **no fused capsule**; the
+trajectory bundle carries the fused policy and the trajectories, unchanged. Both
+are versioned `v0.1.0`, under separate tags, so the policy-swap demo can be
+released without touching the trajectory one.
 
 ```sh
+make fetch-cake-policy-swap        # bin/fetch-release.sh --flavour policy-swap
+```
+
+The private bundle builder produces both flavours
+(`release/build-bundle.sh --flavour trajectory|policy-swap`). To run against a
+bundle you built yourself, fetch it with `--from`, or point `MD_RELEASE_DIR` at
+its parent:
+
+```sh
+bin/fetch-release.sh --flavour policy-swap --from /path/to/release/out
 MD_RELEASE_DIR=/path/to/release/out make policy-swap
 ```
