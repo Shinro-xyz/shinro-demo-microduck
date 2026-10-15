@@ -244,9 +244,7 @@ def run(
         # The client is launched with a +40 s safety margin on the loop, so the
         # panel's time axis must follow the *intended* run, not the loop bound —
         # otherwise the walk only fills a third of the window.
-        panels = SwapPanels(
-            seg_list, panel_seconds if panel_seconds is not None else seconds, references=seg_refs, label=module_label
-        )
+        panels = SwapPanels(seg_list, panel_seconds if panel_seconds is not None else seconds, references=seg_refs, label=module_label)
         grabber = FrameGrabber(sim, render, panels)
         if not grabber.enabled:
             grabber = None
