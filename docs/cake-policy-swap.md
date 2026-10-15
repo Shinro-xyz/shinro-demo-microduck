@@ -64,6 +64,14 @@ live in `docs/media/cake/`):
   `bridge` across the whole axis, only the `policy` leaf's generation moving,
   the trajectory unchanged — over the update transaction that moved it.
 
+![The policy swap: the trunk path coloured by policy, the trunk speed, and the graph the transaction moved](media/cake/microduck_cake_policy_swap.png)
+
+_The same figure the trajectory swap draws, for the policy swap instead: the path
+is coloured by which policy drove it (`stand` before the dashed marker, `walk`
+after), the speed beside it is the gait change itself, and the right panel shows
+the stable `bridge` running throughout while only the `policy` leaf's generation
+moves. One run of `make policy-swap`._
+
 ## Reading the result
 
 A run prints the transaction phase, the session identity before and after, and
