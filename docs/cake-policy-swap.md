@@ -100,6 +100,15 @@ the robot. That is a property of the networks, not of the swap: the transaction
 is identical in both directions. A genuinely bumpless walk→stand would need the
 incoming network to be a recovery policy (or a longer, state-aware blend).
 
+The **render profile** matters too, for a different reason. The split's bridge and
+leaf each own a 50 Hz thread, so they are loosely coupled; the heavy `cake`
+profile's 1080-px composite redraw can starve one of them and the duck can fall
+*before* the swap (~2 of 3 runs — with `GIF=` and no render at all, none of the
+runs fell). The default `compact` profile renders the same tracking panel at 720
+px and holds, which is why `make policy-swap` uses it; `PGIF=cake` selects the
+heavy one. That sensitivity is the price of the loose coupling — scheduler
+lockstep would remove it.
+
 ## Requires a release with the split capsules
 
 This demo needs a release whose `caps/` carries `microduck_bridge`,
