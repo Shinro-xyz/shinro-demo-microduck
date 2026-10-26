@@ -367,8 +367,16 @@ TRAJECTORY_GIF = Render(frame_wh=(256, 256), composite_width=576, every=6, color
 #: follow-camera makes every frame's 3-D scene new.
 CAKE = Render(frame_wh=(360, 360), composite_width=1080, every=12, colors=64, fuzz=5)
 
+#: Cheapest profile that still shows the duck: a long stride, so a machine that
+#: cannot afford 12.5 fps can still hold the 50 Hz loop. A lagging client slows the
+#: *plant* here (it is the lockstep peer), and a walk that is still accelerating
+#: out of a stand has the least margin — a stride-5 capture on a laptop was enough
+#: to topple it before the first swap.
+LIGHT = Render(frame_wh=(288, 288), composite_width=640, every=16, colors=64)
+
 #: Render profiles selectable with ``--gif``.
-GIF_PROFILES = {"full": Render(), "compact": COMPACT, "trajectory": TRAJECTORY_GIF, "cake": CAKE}
+GIF_PROFILES = {"full": Render(), "compact": COMPACT, "trajectory": TRAJECTORY_GIF,
+                "cake": CAKE, "light": LIGHT}
 
 
 def _optimize_gif(path, fuzz: int) -> None:

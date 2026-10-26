@@ -74,6 +74,9 @@ from shinro_demo_microduck.viz import GIF_PROFILES
 if TYPE_CHECKING:
     from shinro_demo_microduck.trajectory import ReferencePath
 
+#: Ticks to run before the video pipeline is built (see the loop).
+RENDER_AFTER_TICKS = 10
+
 #: The command block width (`twist(3)` + `head_pose(4)` + `body_pose(6)`); it is
 #: the trajectory module's, not this process's.
 N_COMMAND = 13
@@ -229,12 +232,18 @@ def run(
     anchor_pose = (0.0, 0.0, 0.0)
     anchor_theta = 0.0
 
+    # The module reads proprioception and the pose first; prime it with the
+    # reset state.
+    conn.sendall(SEND_STRUCT.pack(*_state(sim)))
+
     # Optional video: the 3-D walk plus a bird's-eye panel that colours the path
     # by the trajectory module driving it, plots the tracking error, and marks
     # each live swap.
     panels = None
     grabber = None
-    if render is not None:
+
+    def _build_render() -> tuple[object | None, object | None]:
+        """The video pipeline, built *after* the first few ticks (see the loop)."""
         from shinro_demo_microduck.viz import FrameGrabber, SwapPanels
 
         seg_list = segments or [("trajectory", 0.0)]
@@ -244,18 +253,29 @@ def run(
         # The client is launched with a +40 s safety margin on the loop, so the
         # panel's time axis must follow the *intended* run, not the loop bound —
         # otherwise the walk only fills a third of the window.
-        panels = SwapPanels(seg_list, panel_seconds if panel_seconds is not None else seconds, references=seg_refs, label=module_label)
-        grabber = FrameGrabber(sim, render, panels)
-        if not grabber.enabled:
-            grabber = None
-            panels = None
+        built_panels = SwapPanels(seg_list, panel_seconds if panel_seconds is not None else seconds, references=seg_refs, label=module_label)
+        built = FrameGrabber(sim, render, built_panels)
+        if not built.enabled:
+            return None, None
+        return built_panels, built
 
-    # The module reads proprioception and the pose first; prime it with the
-    # reset state.
-    conn.sendall(SEND_STRUCT.pack(*_state(sim)))
-
+    # Discard whatever the plane had already published before it saw the prime,
+    # and hold the reset pose for one control period. The bridge publishes its
+    # action into a live table (the plant samples it rather than asking for it),
+    # so on a slow start one generation — computed from a command block that had
+    # not been published yet — can be waiting here. Applying that to a duck still
+    # standing on its reset pose is what toppled rendered runs: headless, the
+    # zero the bridge starts with happened to arrive first. Both are accidents;
+    # this makes the first tick the same in every mode.
     try:
         for step in range(n_steps):
+            if render is not None and grabber is None and step == RENDER_AFTER_TICKS:
+                # Building the renderer compiles shaders and allocates a GL
+                # context: about a second on a laptop, right in the middle of the
+                # opening exchange with the plane. Deferred past the first ticks so
+                # a captured run starts as the headless one does — otherwise the
+                # first published action differs and the two runs diverge.
+                panels, grabber = _build_render()
             try:
                 raw = _recv_exact(conn, ACT_STRUCT.size)
                 if raw is None:
@@ -295,7 +315,14 @@ def run(
                         cross_track = float(reference.cross_track(local))
                     else:
                         cross_track = float(reference.cross_track(pos))
-            rows.append((now, float(pos[0]), float(pos[1]), float(pos[2])))
+            rows.append((
+                now,
+                float(pos[0]),
+                float(pos[1]),
+                float(pos[2]),
+                math.degrees(sim.trunk_tilt),
+                math.degrees(_yaw(sim.trunk_quaternion)),
+            ))
             ctes.append(cross_track)
             if grabber is not None and grabber.due(step):
                 panels.update(now, pos, seg, cross_track)
@@ -331,9 +358,12 @@ def run(
         try:
             csv_path.parent.mkdir(parents=True, exist_ok=True)
             with open(csv_path, "w") as fh:
-                fh.write("t,x,y,z,cross_track\n")
-                for (t, x, y, z), cte in zip(rows, ctes):
-                    fh.write(f"{t:.4f},{x:.6f},{y:.6f},{z:.6f},{cte:.6f}\n")
+                # The trunk's pose, not just its track: a swap is a claim about
+                # posture as well as position, and `tilt_deg` is what says whether
+                # the duck stayed on its feet (`yaw_deg` is what the trajectory steers).
+                fh.write("t,x,y,z,cross_track,tilt_deg,yaw_deg\n")
+                for (t, x, y, z, tilt, yaw), cte in zip(rows, ctes):
+                    fh.write(f"{t:.4f},{x:.6f},{y:.6f},{z:.6f},{cte:.6f},{tilt:.3f},{yaw:.3f}\n")
         except OSError as exc:
             print(f"sim: could not write {csv_path}: {exc}", file=sys.stderr)
         else:

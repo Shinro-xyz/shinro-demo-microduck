@@ -47,8 +47,9 @@ PHASES = (
 )
 
 #: One colour per policy. The keys are the demo's `--from`/`--to` names.
-COLORS = {"stand": "tab:blue", "walk": "tab:orange"}
-LABELS = {"stand": "standing network", "walk": "walking network"}
+COLORS = {"stand": "tab:blue", "walk": "tab:orange", "walk_velstand": "tab:green"}
+LABELS = {"stand": "standing network", "walk": "walking network",
+          "walk_velstand": "walking network (velstand)"}
 
 
 def _load(run_dir: Path) -> tuple[dict, list[tuple[float, float, float, float]]]:
