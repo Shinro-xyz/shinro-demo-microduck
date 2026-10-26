@@ -1,0 +1,17 @@
+group,run,load_phase_s,max_tilt_deg,lowest_trunk_cm,steps,fallen
+pollen,1,1.5,103,2.0,,yes
+pollen,2,2.5,103,2.0,,yes
+pollen,3,3.5,103,1.9,,yes
+pollen,4,4.5,95,3.1,,yes
+pollen,5,5.5,102,1.1,,yes
+pollen,6,6.5,81,4.3,,yes
+cake_walk_to_walk_velstand,1,,5.6,11.2,512,no
+cake_walk_to_walk_velstand,2,,11.6,10.9,509,no
+cake_walk_to_walk_velstand,3,,7.0,11.2,514,no
+cake_walk_to_walk_velstand,4,,7.0,11.2,513,no
+cake_walk_to_walk_velstand,5,,7.8,11.2,514,no
+cake_walk_to_stand,1,,178.8,-10.4,513,yes
+cake_walk_to_stand,2,,178.8,-10.4,512,yes
+cake_walk_to_stand,3,,179.1,-10.3,514,yes
+cake_walk_to_stand,4,,178.8,-10.4,512,yes
+cake_walk_to_stand,5,,179.1,-10.3,513,yes
