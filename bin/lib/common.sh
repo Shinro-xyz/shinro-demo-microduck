@@ -72,6 +72,7 @@ md_tarball_name() {
     case "${3:-trajectory}" in
         trajectory) ;;
         policy-swap) suffix="-policyswap" ;;
+        walk-swap) suffix="-walkswap" ;;
         *) return 1 ;;
     esac
     printf 'microduck-cake%s-%s-%s.tar.gz' "$suffix" "$1" "$2"
@@ -79,19 +80,22 @@ md_tarball_name() {
 
 # --- flavours -----------------------------------------------------------------
 #
-# Two bundles are published, both at this repository's VERSION, each serving one
+# Three bundles are published, all at this repository's VERSION, each serving one
 # demo. `trajectory` (the default) is the fused policy + the swappable
 # trajectories — the `make cake` demo. `policy-swap` is the split: the stable
 # `bridge` + the swappable policy leaves + the trajectories, and carries no
-# fused capsule — the `make policy-swap` demo. They live in separate releases,
-# because a repository has one tag per version and the trajectory release owns
-# the bare `vX.Y.Z`, so the policy-swap release namespaces it.
+# fused capsule — the `make policy-swap` demo. `walk-swap` is the same split with a
+# second *walking* leaf (`velstand`) instead of the standing one, for
+# `make walk-swap`: replacing the network that is driving while the duck walks.
+# They live in separate releases, because a repository has one tag per version and
+# the trajectory release owns the bare `vX.Y.Z`, so the other two namespace it.
 
 md_flavour_slug() {
     # md_flavour_slug FLAVOUR SLUG: the release directory for a flavour.
     case "$1" in
         trajectory) printf '%s' "$2" ;;
         policy-swap) printf '%s-policyswap' "$2" ;;
+        walk-swap) printf '%s-walkswap' "$2" ;;
         *) return 1 ;;
     esac
 }
@@ -101,6 +105,7 @@ md_flavour_tag() {
     case "$1" in
         trajectory) printf '%s' "$2" ;;
         policy-swap) printf 'policyswap-%s' "$2" ;;
+        walk-swap) printf 'walkswap-%s' "$2" ;;
         *) return 1 ;;
     esac
 }
@@ -160,6 +165,14 @@ md_check_binaries() {
         policy-swap)
             for b in microduck_bridge microduck_policy microduck_policy_stand; do
                 [ -f "$dir/caps/$b.cakecap" ] || md_fail "$dir holds no caps/$b.cakecap (the policy-swap bundle)" 5
+            done
+            ;;
+        walk-swap)
+            # The same split as policy-swap, with a second *walking* leaf instead of
+            # the standing one: walk -> walk is the swap Pollen's own runtime can be
+            # asked for, so it is the one worth comparing.
+            for b in microduck_bridge microduck_policy microduck_policy_velstand; do
+                [ -f "$dir/caps/$b.cakecap" ] || md_fail "$dir holds no caps/$b.cakecap (the walk-swap bundle)" 5
             done
             ;;
         *) md_fail "unknown release flavour '$flav'" 5 ;;

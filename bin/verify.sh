@@ -22,7 +22,7 @@ while [ $# -gt 0 ]; do
     case "$1" in
         --at) DIR="${2:?--at needs a directory}"; shift 2 ;;
         --flavour) FLAVOUR="${2:?--flavour needs a value}"; shift 2 ;;
-        -h | --help) echo "usage: bin/verify.sh [--at RELEASE_DIR] [--flavour trajectory|policy-swap]"; exit 0 ;;
+        -h | --help) echo "usage: bin/verify.sh [--at RELEASE_DIR] [--flavour trajectory|policy-swap|walk-swap]"; exit 0 ;;
         *) md_fail "unrecognised argument '$1'" 5 ;;
     esac
 done
@@ -41,7 +41,7 @@ if [ -z "$FLAVOUR" ]; then
     fi
 fi
 md_flavour_tag "$FLAVOUR" "$MD_VERSION" >/dev/null ||
-    md_fail "unknown --flavour '$FLAVOUR' (trajectory or policy-swap)" 5
+    md_fail "unknown --flavour '$FLAVOUR' (trajectory, policy-swap or walk-swap)" 5
 if [ -z "$DIR" ]; then
     DIR="$(md_binaries_dir "$FLAVOUR")" || md_fail "no release for $(md_arch); run bin/fetch-release.sh first" 3
 fi

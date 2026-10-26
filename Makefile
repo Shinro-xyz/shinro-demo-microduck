@@ -146,6 +146,10 @@ fetch-cake:
 # swappable policy leaves), so it is fetched separately from the trajectory one.
 fetch-cake-policy-swap:
 	bin/fetch-release.sh --flavour policy-swap
+# The walk -> walk demo is its own release too: the same split, with a second
+# walking leaf instead of the standing one.
+fetch-cake-walk-swap:
+	bin/fetch-release.sh --flavour walk-swap
 # Is the fetched tarball shippable? Checks the dependency floor and scans for
 # build-tree paths. A tarball that fails either one must not be published.
 cake-verify:
@@ -173,6 +177,14 @@ PSECS ?= 10
 PGIF ?= compact
 policy-swap:
 	MEDIA_DIR=$(MEDIA_DIR) GIF=$(PGIF) bin/run-policy-swap.sh --seconds $(PSECS) --from $(FROM) --to $(TO)
+
+# Replace the *walking* network with a different one, while the duck walks. This
+# is the same task as `robotctl policy load walk <file>` on Pollen's own runtime,
+# which is why it gets its own release and its own target: same swap, same two
+# networks, so the comparison is like for like.
+WSECS ?= 10
+walk-swap:
+	MEDIA_DIR=$(MEDIA_DIR) GIF=$(PGIF) bin/run-policy-swap.sh --seconds $(WSECS) --from walk --to walk_velstand
 
 test:
 	$(PYTHON) -m pytest tests/ -v --tb=short

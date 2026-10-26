@@ -15,7 +15,7 @@ set -uo pipefail
 while [ $# -gt 0 ]; do
     case "$1" in
         --flavour) FLAVOUR="${2:?--flavour needs a value}"; shift 2 ;;
-        -h | --help) echo "usage: bin/doctor.sh [--flavour trajectory|policy-swap]"; exit 0 ;;
+        -h | --help) echo "usage: bin/doctor.sh [--flavour trajectory|policy-swap|walk-swap]"; exit 0 ;;
         *) md_fail "unrecognised argument '$1'" 5 ;;
     esac
 done
@@ -23,7 +23,7 @@ done
 # its own release, so name it to check that bundle instead.
 FLAVOUR="${FLAVOUR:-trajectory}"
 md_flavour_tag "$FLAVOUR" "$MD_VERSION" >/dev/null ||
-    md_fail "unknown --flavour '$FLAVOUR' (trajectory or policy-swap)" 5
+    md_fail "unknown --flavour '$FLAVOUR' (trajectory, policy-swap or walk-swap)" 5
 
 md_need_tool timeout "it bounds each binary probe"
 

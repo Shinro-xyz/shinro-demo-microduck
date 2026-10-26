@@ -53,7 +53,7 @@ while [ $# -gt 0 ]; do
         --no-gif | --no-render) GIF_PROFILE=""; shift ;;
         --media-dir) MEDIA_DIR="$2"; shift 2 ;;
         --no-bam) BAM_FLAG="--no-bam"; shift ;;
-        -h | --help) echo "usage: bin/run-policy-swap.sh [--seconds 10] [--from stand|walk] [--to stand|walk] [--no-render]"; exit 0 ;;
+        -h | --help) echo "usage: bin/run-policy-swap.sh [--seconds 10] [--from stand|walk] [--to stand|walk|walk_velstand] [--no-render]"; exit 0 ;;
         *) md_fail "unrecognised argument '$1'" 5 ;;
     esac
 done
@@ -62,16 +62,30 @@ cap_for() {
     case "$1" in
         stand) echo microduck_policy_stand ;;
         walk) echo microduck_policy ;;
-        *) md_fail "--from/--to must be stand or walk, got '$1'" 5 ;;
+        # A second, genuinely different walking network (Pollen's `velstand`), so
+        # walk -> walk_velstand is the *same task* as `robotctl policy load walk
+        # <file>` on the real robot: replace the network that is driving, mid-walk.
+        # What differs is only what the runtime does about it — theirs homes the
+        # robot first (2 s, docs/design/policy-channel-design.md), ours rebinds the
+        # slot under the live clock.
+        walk_velstand) echo microduck_policy_velstand ;;
+        *) md_fail "--from/--to must be stand, walk or walk_velstand, got '$1'" 5 ;;
     esac
 }
 FROM_CAP="$(cap_for "$FROM")"
 TO_CAP="$(cap_for "$TO")"
 [ "$FROM" != "$TO" ] || md_fail "--from and --to are both '$FROM'; nothing to swap" 5
+# Which published bundle carries these two leaves. The stand <-> walk demo and the
+# walk <-> walk demo are separate releases, so the target picks the bundle rather
+# than the caller having to know.
+case "$TO" in
+    walk_velstand) BUNDLE_FLAVOUR="walk-swap" ;;
+    *) BUNDLE_FLAVOUR="policy-swap" ;;
+esac
 
 SLUG="${MD_SLUG:-$(md_target_slug)}"
 [ -n "$SLUG" ] || md_fail "no Cake release is published for $(md_arch); this demonstration is a desktop (x86_64) simulation" 3
-BUNDLE="$(md_require_bundle policy-swap)"
+BUNDLE="$(md_require_bundle "$BUNDLE_FLAVOUR")"
 ADMIN_PROBE="$BUNDLE/bin/admin-probe"
 CAKE_PACK="$BUNDLE/bin/cake-pack"
 HOST_FLAG=""
@@ -119,7 +133,7 @@ head -c 488 /dev/zero >"$POLICY_CFG"
 cp -- "$POLICY_CFG" "$SPARE_CFG"
 printf '%s' "$TRAJECTORY" >"$TRAJ_CFG"
 
-md_say "staging the split deployment ($SLUG, $FROM -> $TO)"
+md_say "staging the split deployment ($SLUG, $FROM -> $TO, $BUNDLE_FLAVOUR)"
 deploy_args=(deploy --state-root "$STORE" --plan-out "$PLAN")
 [ -n "$HOST_FLAG" ] && deploy_args+=("$HOST_FLAG")
 deploy_args+=(

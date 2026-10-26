@@ -26,11 +26,11 @@ while [ $# -gt 0 ]; do
         --flavour) FLAVOUR="${2:?--flavour needs a value}"; shift 2 ;;
         --version) VERSION="${2:?--version needs a value}"; shift 2 ;;
         --from) FROM="${2:?--from needs a directory}"; shift 2 ;;
-        -h | --help) echo "usage: bin/fetch-release.sh [--target x86_64] [--flavour trajectory|policy-swap] [--version vX.Y.Z] [--from DIR]"; exit 0 ;;
+        -h | --help) echo "usage: bin/fetch-release.sh [--target x86_64] [--flavour trajectory|policy-swap|walk-swap] [--version vX.Y.Z] [--from DIR]"; exit 0 ;;
         *) md_fail "unrecognised argument '$1'" 5 ;;
     esac
 done
-md_flavour_tag "$FLAVOUR" "$VERSION" >/dev/null || md_fail "unknown --flavour '$FLAVOUR' (trajectory or policy-swap)" 5
+md_flavour_tag "$FLAVOUR" "$VERSION" >/dev/null || md_fail "unknown --flavour '$FLAVOUR' (trajectory, policy-swap or walk-swap)" 5
 
 md_need_tool tar "install tar"
 md_need_tool sha256sum "coreutils ships it"

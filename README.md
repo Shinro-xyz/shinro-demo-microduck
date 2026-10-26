@@ -167,6 +167,8 @@ make cake GIF=                     # skip the render (GIF=cake|full|compact|traj
 make fetch-cake-policy-swap        # the *policy*-swap demo is its own release
 make policy-swap                   # swap the *policy* leaf live: stand -> walk
 make policy-swap FROM=walk TO=stand
+make fetch-cake-walk-swap          # and so is the walk -> walk one
+make walk-swap                     # replace the *walking* network mid-walk
 ```
 
 What a run does:

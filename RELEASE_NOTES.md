@@ -1,12 +1,13 @@
 # v0.1.0 — the Cake bundles for the Microduck demo
 
-The precompiled Cake releases `shinro-demo-microduck` fetches. There are two
-**flavours**, each at `v0.1.0` under its own tag, and each a bundle plus a digest:
+The precompiled Cake releases `shinro-demo-microduck` fetches. There are three
+**flavours**, all at `v0.1.0` under their own tags, each a bundle plus a digest:
 
 | release | tag | bundle |
 | --- | --- | --- |
 | trajectory (`make cake`) | `v0.1.0` | `microduck-cake-v0.1.0-x86_64.tar.gz` |
 | policy-swap (`make policy-swap`) | `policyswap-v0.1.0` | `microduck-cake-policyswap-v0.1.0-x86_64.tar.gz` |
+| walk-swap (`make walk-swap`) | `walkswap-v0.1.0` | `microduck-cake-walkswap-v0.1.0-x86_64.tar.gz` |
 
 `SHA256SUMS`, in each release, is the digest, and the check `bin/fetch-release.sh`
 makes.
@@ -24,6 +25,13 @@ The **trajectory** bundle then adds:
 
 - `caps/microduck.cakecap` — the fused walking policy, compiled from Pollen Robotics' published ONNX
 - `caps/trajectory_{forward,circle,eight,slalom}.cakecap` and their four `_anchor` variants — the swappable trajectory modules
+
+The **walk-swap** bundle is the policy-swap split with a second *walking* leaf
+instead of the standing one — `caps/microduck_policy_velstand.cakecap`, Pollen's
+`velstand.onnx` (their default walking policy since v5). That makes the swap the
+same task on both stacks: replace the network that is driving, mid-walk. Pollen's
+`robotctl policy load walk <file>` does the same thing by parking the robot first;
+`make walk-swap` does it without leaving the gait.
 
 The **policy-swap** bundle carries no fused capsule. It adds:
 
