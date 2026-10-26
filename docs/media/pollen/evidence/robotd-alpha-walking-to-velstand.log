@@ -1,0 +1,5 @@
+2026-10-26T05:05:00.298523Z  WARN robotd: policy change replaces the network driving: going home before swapping change="walk <- /tmp/velstand.onnx" driving=walk
+2026-10-26T05:05:01.018296Z  WARN duck_control::safety: the fall verdict changed fallen=true gravity_z=-0.17952173757496315
+2026-10-26T05:05:02.318032Z  WARN robotd: at the home pose; the policy has the robot
+2026-10-26T05:05:02.319351Z  WARN robotd: policy change complete change="walk <- /tmp/velstand.onnx" loaded=true in_place=false
+2026-10-26T05:05:02.479554Z  WARN duck_control::safety: the fall verdict changed fallen=false gravity_z=-0.5064835724928403
