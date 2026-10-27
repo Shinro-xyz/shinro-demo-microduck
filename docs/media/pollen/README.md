@@ -28,10 +28,11 @@ scripts/duck-sim ctl policy load walk /path/to/velstand.onnx
 
 `alpha_walking.onnx` and `velstand.onnx` are both Pollen's own, from
 `pollen-robotics/microduck-policies`; `velstand` is their default walking policy
-since v5. The same pair is swapped on the Cake side
-(`../cake/microduck_cake_policy_swap_walk_velstand.gif`, `make policy-swap
-FROM=walk TO=walk_velstand`), so both stacks replace the network that is driving,
-mid-walk.
+since v5. This repo vendors the second one (`models/microduck/velstand.onnx`), so
+the command is `… policy load walk models/microduck/velstand.onnx` when run from
+the checkout root. The same pair is swapped on the Cake side
+(`../cake/microduck_cake_policy_swap_walk_velstand.gif`, `make walk-swap`), so both
+stacks replace the network that is driving, mid-walk.
 
 ## What `robotd` says about it
 

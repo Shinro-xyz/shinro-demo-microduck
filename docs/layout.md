@@ -4,10 +4,14 @@
 
 ```
 configs/controllers/onnx_rl_microduck.toml   the policy as a shinro onnx_rl controller
+configs/controllers/onnx_rl_microduck_velstand.toml
+                                             the same controller, Pollen's `velstand` network
 configs/controllers/pure_pursuit.toml        tracker gains (registered microduck_pure_pursuit)
 configs/trajectories/*.toml                  reference presets, in the microduck_loop schema
 scenarios/microduck_walking.toml             policy-only compile scenario (n_x=61, n_u=14)
+scenarios/microduck_walking_velstand.toml    the same compile, for the velstand network
 models/microduck/BEST_alpha_walking.onnx     the vendored walking policy
+models/microduck/velstand.onnx               Pollen's velstand walking policy (the walk-swap leaf)
 docs/*.md                                    these documents
 docs/target_measurements.json                the on-Pi numbers, with provenance
 docs/media/*.gif                             the committed GIFs (the repo's bulk, ~34 MB)

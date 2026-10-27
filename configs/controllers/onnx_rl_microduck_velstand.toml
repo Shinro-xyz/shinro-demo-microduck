@@ -1,5 +1,11 @@
-# The Microduck walking policy (wandb 441tzs6d @ model_3750) as an onnx_rl
-# controller. Compiled by `make compile`; replayed by demos/demo_compiled_policy.py.
+# Pollen Robotics' `velstand` walking policy as an onnx_rl controller: their
+# default *walking* network since v5 (it also stands still at zero command, so
+# there is no separate standing network). Vendored at
+# models/microduck/velstand.onnx — provenance in docs/provenance.md. It is the
+# second leaf of the `make walk-swap` demo, where the network driving the duck is
+# replaced mid-walk.
+#
+#   shinro build scenarios/microduck_walking_velstand.toml --out build/compiled_policy_velstand
 #
 # Contract (locked by tests/test_obs_contract.py):
 #   obs  = 61 D = 48 proprio + 13 command
@@ -9,7 +15,7 @@
 #   the observation normalizer is BAKED INTO THE ONNX -> normalize = false
 type = "onnx_rl"
 name = "microduck_velstand"
-model_path = "/tmp/models2/velstand.onnx"
+model_path = "models/microduck/velstand.onnx"
 # artifact_dir = "build/compiled_policy"   # uncomment to use the compiled backend
 action_space = "continuous"
 deterministic = true
