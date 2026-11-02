@@ -1,7 +1,7 @@
 # shellcheck disable=SC1089,SC2046,SC2068,SC2145,SC2154,SC2276,SC2283,SC2034,SC1091
 # (shellcheck parses this file as shell; the Makefile variables/loops below are not shell)
 
-.PHONY: install test test-quick demo live gif media trajectory trajectory-gifs compile run cake fetch-cake footprint check verify gates interop
+.PHONY: install test test-quick demo live gif media trajectory trajectory-gifs compile run cake crash fetch-cake footprint check verify gates interop
 
 # The shinro framework is pinned to a PUBLISHED release so a fresh clone works
 # with no sibling checkout. Bump SHINRO_VERSION to track a newer tag.
@@ -185,6 +185,34 @@ policy-swap:
 WSECS ?= 10
 walk-swap:
 	MEDIA_DIR=$(MEDIA_DIR) GIF=$(PGIF) bin/run-policy-swap.sh --seconds $(WSECS) --from walk --to walk_velstand
+
+# Crash the control plane under a live plant, restart it, and record what Cake
+# does about it — and what it does not. Swapping a module is easy (see `cake`);
+# a module *dying* is the interesting case, because a Cake module is code mapped
+# into the resident, not a process behind a boundary. The plant supervises: it
+# holds its last command, keeps stepping, and waits for a restarted resident.
+#   make crash                      # SIGKILL at t=5 s, restart at once: the walk continues
+#   make crash RESTART_AFTER=0.3    # ... but a slow restart is a 0.3 s blind plant
+#   make crash FAULT=module         # a fatal fault in the module's own thread
+#   make crash CRASHES=3            # three crashes in a row (no crash-loop gate)
+#   make crash CRASH_SWAP=1         # commit a live trajectory swap first
+#   make crash SUPERVISOR=systemd   # let systemd restart it (the committed unit's policy)
+#   make crash SUPERVISOR=systemd RESTART_SEC=0.05   # ... and tune the interval
+CRASH_SECS ?= 11
+CRASH_AT ?= 5
+CRASHES ?= 1
+RESTART_AFTER ?= 0.0
+FAULT ?= kill
+# Who restarts the control plane. `manual` is this script relaunching the process
+# (the plant is the supervisor: it holds its last command and its own clock);
+# `systemd` runs the resident as a transient user unit with the committed example's
+# own policy — Restart=on-abnormal and RESTART_SEC — and measures that instead.
+SUPERVISOR ?= manual
+RESTART_SEC ?= 2
+crash:
+	bin/run-crash.sh --seconds $(CRASH_SECS) --crash-at $(CRASH_AT) --crashes $(CRASHES) \
+		--restart-after $(RESTART_AFTER) --fault $(FAULT) --supervisor $(SUPERVISOR) \
+		--restart-sec $(RESTART_SEC) $(if $(CRASH_SWAP),--swap)
 
 test:
 	$(PYTHON) -m pytest tests/ -v --tb=short

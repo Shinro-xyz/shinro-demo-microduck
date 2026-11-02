@@ -33,6 +33,7 @@ framework logic (build, trace, oracle, verify all live in the package).
 | `make footprint` | deployment host vs onnxruntime: size, RSS, latency (+ on-Pi) |
 | `make cake` | run the policy as a Cake module (Cake resident + live MuJoCo plant; `TRAJ=`, `SWAP=`, `SECS=`, `GIF=`); default is a 24 s circle→eight→slalom live swap, rendering the walk GIF + the swap figure to `docs/media/cake/` |
 | `make policy-swap` | swap the **policy** live (`FROM=`, `TO=` ∈ {stand,walk}, `PSECS=`); a leaf behind the resident's stable bridge, so the walk continues through the swap. See `docs/cake-policy-swap.md` |
+| `make crash` | crash the control plane under a live plant and restart it (`FAULT=`, `CRASHES=`, `CRASH_AT=`, `RESTART_AFTER=`, `CRASH_SWAP=1`; `FAULT` is `kill` or `module`); measures what a module's death does, what the restart recovers, and how long the plant can walk blind. See `docs/cake-crash-restart.md` |
 | `make fetch-cake` | download + verify the precompiled Cake release (`x86_64` desktop only) |
 | `make test` / `make test-quick` | full suite / no-sim smoke check |
 
@@ -53,7 +54,7 @@ framework logic (build, trace, oracle, verify all live in the package).
 | `scenarios/`, `configs/`, `models/` | compile scenario, component configs, vendored ONNX |
 | `src/shinro_demo_microduck/assets/microduck/` | vendored MJCF + meshes (verbatim from training) |
 | `interop/` | C / C++ / Zig / Rust / Python hosts for the C ABI |
-| `docs/` | compiled-inference, policy-contract, fidelity, footprint, trajectories, provenance, cake-policy-swap |
+| `docs/` | compiled-inference, policy-contract, fidelity, footprint, trajectories, provenance, cake-policy-swap, cake-crash-restart |
 
 ## Build chain (where things happen)
 
@@ -97,6 +98,13 @@ stamp → verify. The ONNX conversion is `shinro/codegen/onnx_import.py`
   the policy is a leaf it consumes with a live binding) and swaps it without
   stopping the walk, where swapping the *fused* policy completes the transaction
   but tears the plant link down. See `docs/cake-policy-swap.md`.
+- **Nothing restarts a module.** A module is code mapped into the resident
+  (`/memfd:<slot>` in `/proc/<pid>/maps`), so its fault is the resident's fault:
+  no drain, no journal record, no per-module supervision, and no crash-loop gate
+  on the restart path. `make crash` measures that, and uses the *plant* as the
+  supervisor — it holds its last command, keeps its own clock, and re-accepts a
+  restarted resident (`--reconnect`). Don't describe that as Cake restarting a
+  module. See `docs/cake-crash-restart.md`.
 - **MuJoCo assets are vendored verbatim** — don't edit `assets/microduck/`. The
   home pose is *not* self-stabilizing; the policy balances (a test pins this, so
   don't "fix" it by stiffening the hold).

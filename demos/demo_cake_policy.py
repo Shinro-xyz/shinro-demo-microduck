@@ -59,9 +59,11 @@ os.environ.setdefault("MUJOCO_GL", "egl")
 import argparse
 import json
 import math
+import select
 import socket
 import struct
 import sys
+import time
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -195,6 +197,7 @@ def run(
     reference_traj: str | None = None,
     module_label: str = "trajectory module",
     video_name: str = "microduck_cake_walk.gif",
+    reconnects: int = 0,
 ) -> dict:
     # The sim's own `command` field is unused: the trajectory comes from the
     # Cake plane. A zero command keeps the sim's reset state canonical.
@@ -209,12 +212,50 @@ def run(
     server = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
     server.bind(socket_path)
     server.listen(1)
-    conn, _ = server.accept()
-    print(f"sim: Cake module connected on {socket_path}")
+
+    def _accept_and_prime(timeout: float | None) -> socket.socket | None:
+        """Accept the control plane's connection and hand it the current state.
+
+        The module reads proprioception and the pose *first*, so the plant speaks
+        first on every connection — including the one a resident makes after it
+        has been restarted and has re-activated the Plan. That is what lets a
+        restarted control plane re-acquire a plant that never stopped.
+        """
+        if timeout is not None:
+            readable, _, _ = select.select([server], [], [], timeout)
+            if not readable:
+                return None
+        try:
+            new_conn, _ = server.accept()
+            new_conn.sendall(SEND_STRUCT.pack(*_state(sim)))
+        except OSError as exc:
+            print(f"sim: accepting the control plane failed: {exc}", file=sys.stderr)
+            return None
+        return new_conn
+
+    conn = _accept_and_prime(None)
+    if conn is not None:
+        print(f"sim: Cake module connected on {socket_path}")
 
     n_steps = max(1, int(round(seconds / CONTROL_DT)))
+    #: The plant's own clock, for the ticks it spends without a control plane. A
+    #: linked tick is paced by the module (its read blocks); an unlinked one would
+    #: otherwise free-run MuJoCo at ~1 kHz and burn the whole run in a fraction of
+    #: the wall time, so the outage is paced here instead.
+    t0 = time.monotonic()
+    #: How many resident restarts this run waits for before it treats the loss of
+    #: the control plane as the end of the run. 0 is the plain demo: one
+    #: connection, and a lost plane ends the walk.
+    reconnects_left = max(0, reconnects)
+    #: Every window in which the plant had no control plane: when it started, how
+    #: many ticks it lasted, and whether a restarted resident came back inside the
+    #: run. The plant keeps stepping through these on the last command it was given.
+    outages: list[dict] = []
     start_xy = sim.trunk_position[:2].copy()
-    rows: list[tuple[float, float, float, float]] = []
+    #: `(t, x, y, z, tilt_deg, yaw_deg, linked)` — `linked` is 1 on a tick the
+    #: control plane answered and 0 on a tick the plant spent holding the last
+    #: command because the control plane was down.
+    rows: list[tuple[float, float, float, float, float, float, float]] = []
     ctes: list[float] = []
     last_action = np.zeros(N_ACTIONS)
 
@@ -232,17 +273,13 @@ def run(
     anchor_pose = (0.0, 0.0, 0.0)
     anchor_theta = 0.0
 
-    # The module reads proprioception and the pose first; prime it with the
-    # reset state.
-    conn.sendall(SEND_STRUCT.pack(*_state(sim)))
-
     # Optional video: the 3-D walk plus a bird's-eye panel that colours the path
     # by the trajectory module driving it, plots the tracking error, and marks
     # each live swap.
     panels = None
     grabber = None
 
-    def _build_render() -> tuple[object | None, object | None]:
+    def _build_render(renderer) -> tuple[object | None, object | None]:
         """The video pipeline, built *after* the first few ticks (see the loop)."""
         from shinro_demo_microduck.viz import FrameGrabber, SwapPanels
 
@@ -253,8 +290,13 @@ def run(
         # The client is launched with a +40 s safety margin on the loop, so the
         # panel's time axis must follow the *intended* run, not the loop bound —
         # otherwise the walk only fills a third of the window.
-        built_panels = SwapPanels(seg_list, panel_seconds if panel_seconds is not None else seconds, references=seg_refs, label=module_label)
-        built = FrameGrabber(sim, render, built_panels)
+        built_panels = SwapPanels(
+            seg_list,
+            panel_seconds if panel_seconds is not None else seconds,
+            references=seg_refs,
+            label=module_label,
+        )
+        built = FrameGrabber(sim, renderer, built_panels)
         if not built.enabled:
             return None, None
         return built_panels, built
@@ -275,21 +317,70 @@ def run(
                 # opening exchange with the plane. Deferred past the first ticks so
                 # a captured run starts as the headless one does — otherwise the
                 # first published action differs and the two runs diverge.
-                panels, grabber = _build_render()
-            try:
-                raw = _recv_exact(conn, ACT_STRUCT.size)
+                panels, grabber = _build_render(render)
+            now = step * CONTROL_DT
+            # A resident that was restarted re-activates the Plan and its modules
+            # connect again. Meet it here rather than blocking on it, so the plant
+            # keeps its own clock through the outage.
+            resumed = False
+            if conn is None and reconnects_left > 0:
+                new_conn = _accept_and_prime(0.0)
+                if new_conn is not None:
+                    conn = new_conn
+                    reconnects_left -= 1
+                    resumed = True
+                    if outages:
+                        outages[-1].update(end_s=now, reconnected=True)
+                        print(
+                            f"sim: a restarted Cake control plane is back at t={now:.2f} s "
+                            f"after {outages[-1]['steps']} ticks "
+                            f"({outages[-1]['steps'] * CONTROL_DT:.2f} s) without one; resuming"
+                        )
+            action = last_action
+            if conn is not None and not resumed:
+                try:
+                    raw = _recv_exact(conn, ACT_STRUCT.size)
+                except OSError:
+                    # A closed or reset socket is the resident dying under the
+                    # module (they share an address space) or the module dying on
+                    # its own. Either way it is the same event from this side.
+                    raw = None
                 if raw is None:
-                    print("sim: the Cake module closed the socket; stopping")
-                    break
-                action = np.asarray(ACT_STRUCT.unpack(raw), dtype=np.float64)
-                sim.step(action)
-                conn.sendall(SEND_STRUCT.pack(*_state(sim)))
-            except (ConnectionResetError, BrokenPipeError):
-                print("sim: the Cake module connection went away; stopping")
-                break
+                    conn.close()
+                    conn = None
+                    if reconnects_left <= 0:
+                        print(f"sim: the Cake control plane went away at t={now:.2f} s; stopping")
+                        break
+                    outages.append({"start_s": now, "steps": 0, "reconnected": False})
+                    print(
+                        f"sim: the Cake control plane went away at t={now:.2f} s; "
+                        f"holding the last command for up to {reconnects} restart(s)"
+                    )
+                else:
+                    action = np.asarray(ACT_STRUCT.unpack(raw), dtype=np.float64)
+            linked = conn is not None and not resumed
+            if not linked:
+                delay = t0 + (step + 1) * CONTROL_DT - time.monotonic()
+                if delay > 0:
+                    time.sleep(delay)
+            sim.step(action)
+            if conn is not None and not resumed:
+                try:
+                    conn.sendall(SEND_STRUCT.pack(*_state(sim)))
+                except OSError:
+                    conn.close()
+                    conn = None
+                    if reconnects_left <= 0:
+                        print(f"sim: the Cake control plane went away at t={now:.2f} s; stopping")
+                        break
+                    outages.append({"start_s": now, "steps": 0, "reconnected": False})
+            if conn is None and outages and not outages[-1]["reconnected"]:
+                # No control plane on this tick: the plant keeps applying the last
+                # command it was given, which is what a robot without a supervisor
+                # would do.
+                outages[-1]["steps"] += 1
             last_action = action
             pos = sim.trunk_position
-            now = step * CONTROL_DT
             # Cross-track error against the active module's reference: 0 means the
             # trunk rode the path; the jump across a swap is the transition the
             # robot has to make onto the new trajectory.
@@ -315,20 +406,24 @@ def run(
                         cross_track = float(reference.cross_track(local))
                     else:
                         cross_track = float(reference.cross_track(pos))
-            rows.append((
-                now,
-                float(pos[0]),
-                float(pos[1]),
-                float(pos[2]),
-                math.degrees(sim.trunk_tilt),
-                math.degrees(_yaw(sim.trunk_quaternion)),
-            ))
+            rows.append(
+                (
+                    now,
+                    float(pos[0]),
+                    float(pos[1]),
+                    float(pos[2]),
+                    math.degrees(sim.trunk_tilt),
+                    math.degrees(_yaw(sim.trunk_quaternion)),
+                    1.0 if linked else 0.0,
+                )
+            )
             ctes.append(cross_track)
             if grabber is not None and grabber.due(step):
                 panels.update(now, pos, seg, cross_track)
                 grabber.capture(sim)
     finally:
-        conn.close()
+        if conn is not None:
+            conn.close()
         server.close()
         sock_path.unlink(missing_ok=True)
 
@@ -352,6 +447,10 @@ def run(
         "mean_cross_track_m": float(np.mean(finite_cte)) if finite_cte else None,
         "nan_obs": bool(not np.all(np.isfinite(sim.observation()))),
         "video": str(video) if video is not None else None,
+        "outages": outages,
+        "outage_steps": sum(o["steps"] for o in outages),
+        "outage_s": sum(o["steps"] for o in outages) * CONTROL_DT,
+        "steps_with_control": int(sum(r[6] for r in rows)),
     }
 
     if csv_path is not None:
@@ -361,9 +460,9 @@ def run(
                 # The trunk's pose, not just its track: a swap is a claim about
                 # posture as well as position, and `tilt_deg` is what says whether
                 # the duck stayed on its feet (`yaw_deg` is what the trajectory steers).
-                fh.write("t,x,y,z,cross_track,tilt_deg,yaw_deg\n")
-                for (t, x, y, z, tilt, yaw), cte in zip(rows, ctes):
-                    fh.write(f"{t:.4f},{x:.6f},{y:.6f},{z:.6f},{cte:.6f},{tilt:.3f},{yaw:.3f}\n")
+                fh.write("t,x,y,z,cross_track,tilt_deg,yaw_deg,linked\n")
+                for (t, x, y, z, tilt, yaw, linked), cte in zip(rows, ctes):
+                    fh.write(f"{t:.4f},{x:.6f},{y:.6f},{z:.6f},{cte:.6f},{tilt:.3f},{yaw:.3f},{int(linked)}\n")
         except OSError as exc:
             print(f"sim: could not write {csv_path}: {exc}", file=sys.stderr)
         else:
@@ -418,6 +517,14 @@ def main(argv: list[str] | None = None) -> int:
         default="microduck_cake_walk.gif",
         help="GIF file name under --out-dir",
     )
+    parser.add_argument(
+        "--reconnect",
+        type=int,
+        default=0,
+        metavar="N",
+        help="wait for up to N restarted control planes instead of stopping when the socket goes away "
+        "(the plant holds its last command meanwhile; see docs/cake-crash-restart.md)",
+    )
     args = parser.parse_args(argv)
 
     segments = None
@@ -437,6 +544,7 @@ def main(argv: list[str] | None = None) -> int:
         reference_traj=args.reference,
         module_label=args.module_label,
         video_name=args.video_name,
+        reconnects=args.reconnect,
     )
     if metrics["steps"] < 10:
         print("sim: too few steps for a verdict", file=sys.stderr)

@@ -169,6 +169,7 @@ make policy-swap                   # swap the *policy* leaf live: stand -> walk
 make policy-swap FROM=walk TO=stand
 make fetch-cake-walk-swap          # and so is the walk -> walk one
 make walk-swap                     # replace the *walking* network mid-walk
+make crash                         # crash the control plane, restart it, and see what survives
 ```
 
 What a run does:
@@ -208,6 +209,21 @@ in the private [`shinro-bench/cake`](../shinro-bench/cake) tree and published fo
 `x86_64` — this is a desktop simulation; this repository only fetches and runs it. There is
 no `cake_*` header, no entry symbol and no lifecycle callback here — see
 [The Cake control plane](docs/cake-control-plane.md).
+
+### Swapping is not surviving
+
+A module can be replaced; it cannot be supervised. A Cake module is code mapped into
+**the resident's own address space**, so there is nothing for a fault in it to stop
+at — the process dies, the drain never runs, and nothing restarts the module.
+`make crash` measures that: it crashes the control plane under the running plant,
+restarts the resident, and records what came back. The plant is what supervises — it
+holds its last command and keeps its own clock (`--reconnect`), and re-acquires the
+restarted control plane — which is also how the limit shows up as a number: the walk
+survives **0.14 s** of blindness and falls at **0.24 s**, while the resident's own
+restart is 0.07 s. Crash *after* a committed live swap and the restart's durable
+recovery refuses (`class 5`) and the process starts anyway, at an epoch **behind**
+the one the crashed process had committed. See
+[Crashing the control plane](docs/cake-crash-restart.md).
 
 ## What Cake gives you
 
