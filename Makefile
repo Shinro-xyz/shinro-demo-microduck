@@ -6,9 +6,9 @@
 # The shinro framework is pinned to a PUBLISHED release so a fresh clone works
 # with no sibling checkout. Bump SHINRO_VERSION to track a newer tag.
 SHINRO_VERSION ?= v0.3.0
-SHINRO_WHEEL ?= https://github.com/Shinro-xyz/shinro-python-modules/releases/download/$(SHINRO_VERSION)/shinro-$(SHINRO_VERSION:v%=%)-py3-none-any.whl
+SHINRO_WHEEL ?= https://github.com/Shinro-xyz/shinro-control/releases/download/$(SHINRO_VERSION)/shinro-$(SHINRO_VERSION:v%=%)-py3-none-any.whl
 # Path to a local shinro checkout, for `make install-editable`.
-SHINRO ?= ../shinro-python-modules
+SHINRO ?= ../shinro-control
 # Interpreter for install, the demo and the tests — one interpreter for all
 # three. `pip` is deliberately NOT called directly: a bare `pip` is absent from
 # PATH on many current distributions (and `python3 -m pip` can be missing too),

@@ -5,7 +5,7 @@ can swap mid-stride.**
 
 Microduck is a 14-servo, ~25 cm biped whose PPO walking policy is exported to ONNX
 and compiled to a **standalone shared object** by the [shinro control
-framework](https://github.com/Shinro-xyz/shinro-python-modules). That kernel drives
+framework](https://github.com/Shinro-xyz/shinro-control). That kernel drives
 MuJoCo two ways: called directly through its C ABI, or loaded as a **module on the
 Cake supervisory plane**, where the walking policy and the trajectory are separate
 modules and the trajectory is replaced live — no restart, no missed tick.

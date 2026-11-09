@@ -57,7 +57,7 @@ Before the first release, confirm:
   and walking policy are Apache-2.0 and are explicitly excluded from the
   Licensed Work above. See `NOTICE` §3. Nothing here restricts any right Apache-2.0
   already grants you in them.
-- **It does not resolve the framework's licence.** `shinro-python-modules`, which
+- **It does not resolve the framework's licence.** `shinro-control`, which
   the demo's install step depends on, still ships a **zero-byte `LICENSE`**, which
   means all rights reserved by default. That is a separate decision, on a
   different repository, with different reasoning — there is a written argument
@@ -81,7 +81,7 @@ would remove the Licensor, the Licensed Work, the Additional Use Grant and the
 Change Date, and an unparameterized BSL is not a grant anyone can rely on.
 
 The cost of this is real and worth stating: **the same badge appears on
-`shinro-python-modules`, where it means something entirely different** — that
+`shinro-control`, where it means something entirely different** — that
 repository's `LICENSE` is zero bytes, so `NOASSERTION` there is literally "all
 rights reserved by default". Across the org, one badge covers two opposite
 situations. Prose is what disambiguates them, which is why `NOTICE` opens by

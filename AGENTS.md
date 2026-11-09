@@ -4,14 +4,14 @@ A **Microduck** reference-robot demo for the `shinro` control framework: a
 14-servo biped whose PPO-trained walking policy is compiled from ONNX to a Zig
 `.so`, then replayed in MuJoCo through the `shinro_step` C ABI.
 
-This repo is a **consumer** of [`shinro-python-modules`](../shinro-python-modules).
+This repo is a **consumer** of [`shinro-control`](../shinro-control).
 It adds the robot-specific assets and demos; it does **not** reimplement
 framework logic (build, trace, oracle, verify all live in the package).
 
 ## Orientation
 
 - `shinro` is consumed from a **sibling checkout**, installed editable:
-  `make install` → `pip install -e "../shinro-python-modules[onnx-rl]"` +
+  `make install` → `pip install -e "../shinro-control[onnx-rl]"` +
   `pip install -e ".[mujoco,media,dev]"`. Import as `shinro.*`.
 - Python ≥ 3.12. `zig` must be on `PATH` to compile. `rustc` is optional (only
   the interop harness).
