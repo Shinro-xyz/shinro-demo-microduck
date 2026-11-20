@@ -133,7 +133,7 @@ stamp → verify. The ONNX conversion is `shinro/codegen/onnx_import.py`
 
 ## Consumer and release rules (migrated 2026-11-20)
 
-Full detail, verbatim, in ``notes/shinro-demo-microduck-memory-2026-11-20.md` (platform vault)`.
+Full detail, verbatim, in `notes/shinro-demo-microduck-memory-2026-11-20.md` (platform vault).
 
 - **This repo is consumer-only.** No Cake source, no ABI headers. `make fetch-cake`
   verifies and extracts `cake/release/<slug>/`, then `make cake [TRAJ=…] [SWAP=…]`.
