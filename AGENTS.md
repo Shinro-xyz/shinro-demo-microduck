@@ -130,3 +130,24 @@ stamp → verify. The ONNX conversion is `shinro/codegen/onnx_import.py`
   verification, and stop.
 - One commit per coherent change set (not per file). Conventional Commits
   (`feat:`, `fix:`, `docs:` …) — no history rewrites.
+
+## Consumer and release rules (migrated 2026-11-20)
+
+Full detail, verbatim, in `lab-notes/daily/2026-11-20-memory-migration.md`.
+
+- **This repo is consumer-only.** No Cake source, no ABI headers. `make fetch-cake`
+  verifies and extracts `cake/release/<slug>/`, then `make cake [TRAJ=…] [SWAP=…]`.
+- **Demo scripts, configs and assets belong here**, never in a sibling repo
+  (not `shinro-bench`, not `shinro-cake`). Build/compile/verify must call the
+  installed `shinro` package API directly — no demo-local wrapper, no reimplementation.
+- **x86_64 needs the host-corrected `plan-resident`** and `--host` on both
+  `cake-pack deploy` and `admit`; the published remapped `cake-resident` is refused
+  with `plan-target-profile-mismatch`. aarch64 runs `cake-resident` without `--host`.
+- **Atomic ≠ bumpless.** A policy swap that leaves the policy owning the sim socket
+  ends the walk when the link tears down. The working shape is the split: a bridge
+  module owns the socket and the 50 Hz clock, the policy is a swappable leaf that
+  cross-fades over `RAMP_TICKS=25`. `make policy-swap` defaults to `PGIF=compact`
+  because the two-thread pipeline starves under the heavy render profile.
+- **Every bundle carries `LICENSE` (BSL-1.1) and `NOTICE-cake-binaries.txt`**, and
+  `build-bundle.sh` applies the byte-preserving path redaction plus regenerates a
+  flavour-scoped `SHA256SUMS`. Bundles are deliberately not byte-reproducible.
